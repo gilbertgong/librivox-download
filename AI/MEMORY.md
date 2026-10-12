@@ -1,0 +1,65 @@
+# Working notes for AI assistants
+
+How the user prefers an AI assistant to work in this repo. Any assistant (whatever the tool or model) should read
+this file and `AI/PROJECT_LOG.md` before starting, and follow them.
+
+## How this repo is organized for AI
+
+- `AI/` is the single home for everything an assistant needs: `MEMORY.md` (how to work: these notes),
+  `PROJECT_LOG.md` (the project: goals, decisions and their reasons, how things work, history, status, open
+  questions, known issues), and `STRATEGY.md` (how this structure works, and how to set it up in another repo).
+- Entry files (`AGENTS.md`, `CLAUDE.md`, and any other assistant's equivalent) only point to the files in `AI/`.
+  They hold no content of their own, so nothing depends on which assistant is used.
+- `README.md` is for people: what the project is, how to run it, options, output, and information derived for
+  them.
+
+*Why:* the user may continue on another computer, in a fresh session, or with a different assistant. Only the
+repo's own files carry over, and they should work for any assistant.
+
+## Remember things in the repo, not in the assistant's own memory
+
+Save lasting preferences in this file and project facts in `AI/PROJECT_LOG.md`. Don't use an assistant's built-in or
+per-machine memory for this project.
+
+*Why:* built-in memory stays on one computer or account, and other assistants can't see it.
+
+## Keep the docs current without asking
+
+Update `README.md`, `AI/PROJECT_LOG.md` and `AI/MEMORY.md` as part of each change, without asking first:
+- the README when what a person sees or runs changes;
+- the log for decisions and their reasons, findings, history, status, open questions and known issues;
+- this file when the user states a lasting preference about how to work.
+
+*Why:* the docs should always match the code, so the next session can pick up from them alone.
+
+## Test a script as designed; don't survey around it
+
+Test a script by running it the way it's meant to run, with its normal limits, not by raising the limits or writing
+side queries to survey every input. If the output is wrong, fix the script.
+
+While the user is still shaping what a script should do, don't run it after each edit. Wait until they say to.
+
+*Why:* the script is supposed to do the work itself; an exhaustive survey wastes requests and time, and runs during
+design aren't wanted.
+
+## Judge a run by whether the tool works, not by one reader's results
+
+When reviewing a run, check that the tool behaves correctly. Don't analyse or record the particular reader's
+results (for example, how many candidates fell outside the length range), and don't let them drive design.
+
+*Why:* the tool is meant for many readers in very different situations; one reader's numbers aren't useful.
+
+## Solve observed problems only
+
+Don't plan or build fixes for problems that are only theoretical. Mention a risk once at most, then drop it until
+it actually shows up in testing.
+
+*Why:* speculative issues steered design choices before anyone had seen them happen.
+
+## Protect files the user creates
+
+Before a test writes to or deletes a path the user may have created themselves (local configs, anything
+git-ignored and machine-specific), check whether it exists. Prefer a scratch path; if the real path is needed, move
+the existing file aside and restore it in the same step.
+
+*Why:* a test once overwrote and then deleted a config file the user had just saved, and it had to be recreated.

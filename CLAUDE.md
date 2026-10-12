@@ -1,0 +1,2 @@
+@AI/MEMORY.md
+@AI/PROJECT_LOG.md
