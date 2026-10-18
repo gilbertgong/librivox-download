@@ -205,6 +205,8 @@ class State:
         self.path = out / "state.json"
         self.lock = threading.Lock()
         self.wake = threading.Event()
+        self.stop = threading.Event()
+        self.collecting = False
         self.target = args.projects
         self.want_downloads = 0
         self.queue = []  # project URLs to download one by one, from the per-row buttons
@@ -213,8 +215,12 @@ class State:
         self.page = 0
         self.checked = {}  # project URL -> {title, type, reason}; reason None for candidates
         self.candidates = []
+        self.extra = {}
+        self.updated_at = now()
         if self.path.exists():
             saved = json.loads(self.path.read_text(encoding="utf-8"))
+            self.extra = saved
+            self.updated_at = saved.get("updated_at", now())
             self.checked, self.candidates = saved["checked"], saved["candidates"]
             self.target = max(self.target, saved.get("target", 0))
             self.want_downloads = saved.get("want_downloads", 0)  # the last "Download N"
@@ -229,13 +235,20 @@ class State:
                         c["download"] = None  # the saved bulk target selects it again, prime first
             if self.reconcile_downloads():
                 self.save()
+            self.collecting = self.want_downloads > 0 and self.downloaded() < self.want_downloads
+
+    def record(self):
+        """Full state record, with unknown saved metadata preserved. Called with the lock held."""
+        return {**self.extra, "reader": self.args.name, "reader_id": self.rid, "updated_at": self.updated_at, "target": self.target,
+                "want_downloads": self.want_downloads, "queue": self.queue,
+                "status": self.status, "page": self.page,
+                "selection": selection_options(self.args),
+                "checked": self.checked, "candidates": self.candidates}
 
     def save(self):
         self.out.mkdir(parents=True, exist_ok=True)
-        data = {"reader": self.args.name, "reader_id": self.rid, "updated_at": now(), "target": self.target,
-                "want_downloads": self.want_downloads, "queue": self.queue,
-                "selection": selection_options(self.args),
-                "checked": self.checked, "candidates": self.candidates}
+        self.updated_at = now()
+        data = self.record()
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.path)
@@ -332,7 +345,11 @@ def scanner(st):
             with st.lock:
                 st.page = page
             for p in projects:
+                if st.stop.is_set():
+                    return
                 while True:  # wait while there are enough; a reject or "scan more" wakes this up
+                    if st.stop.is_set():
+                        return
                     with st.lock:
                         enough = st.good_prime() >= st.goal()
                         st.status = "paused: enough candidates" if enough else "scanning"
@@ -410,258 +427,22 @@ def download_next(st):
 
 
 def downloader(st):
-    while True:
-        if not download_next(st):
+    while not st.stop.is_set():
+        with st.lock:
+            if st.collecting and st.downloaded() >= st.want_downloads:
+                st.collecting = False
+            working = st.collecting or bool(st.queue)
+        if not working or not download_next(st):
             st.wake.wait(2)
             st.wake.clear()
 
 
-# ---------------------------------------------------------------- web page
-
-PAGE = r"""<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LibriVox picker</title>
-<style>
-:root { --bg:#fafaf8; --done-bg:#eaf3fd; --fg:#1d1d1b; --muted:#6b6b66; --line:#e2e1dc; --card:#fff; --accent:#2f6fdb;
-        --bad:#b3261e; --ok:#1e7a3c; --warn:#9a6700; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg:#161615; --done-bg:#14202e; --fg:#ecebe6; --muted:#9a9993; --line:#33332f; --card:#1f1f1d; --accent:#7aa7ff;
-          --bad:#ff8a80; --ok:#6fd08c; --warn:#e3b341; } }
-* { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; transition:background .6s; }
-body.done { background:var(--done-bg); }
-#complete { margin:0 0 18px; padding:14px 16px; border:1px solid var(--accent); border-radius:10px;
-            background:var(--card); font-size:17px; font-weight:600; }
-#complete .muted { display:block; font-size:14px; font-weight:400; margin-top:2px; }
-main { max-width:1100px; margin:0 auto; padding:20px 16px 60px; }
-h1 { font-size:22px; margin:0 0 4px; }
-a { color:var(--accent); }
-.muted { color:var(--muted); }
-.bar { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:14px 0 18px; padding:12px 14px;
-       background:var(--card); border:1px solid var(--line); border-radius:10px; }
-.bar b { font-variant-numeric:tabular-nums; }
-button { font:inherit; padding:5px 11px; border-radius:7px; border:1px solid var(--line); background:var(--card);
-         color:var(--fg); cursor:pointer; }
-button:hover { border-color:var(--muted); }
-button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-button.keep.on { background:var(--ok); border-color:var(--ok); color:var(--bg); }
-button.reject.on { background:var(--bad); border-color:var(--bad); color:var(--bg); }
-input[type=number] { width:64px; font:inherit; padding:4px 6px; border-radius:7px; border:1px solid var(--line);
-                     background:var(--card); color:var(--fg); }
-.card { padding:12px 14px; margin-bottom:10px;
-        background:var(--card); border:1px solid var(--line); border-radius:10px; }
-.card.rejected { opacity:.45; }
-.card.kept { border-color:var(--ok); }
-.title { font-weight:600; }
-.tag { display:inline-block; font-size:12px; padding:1px 7px; border-radius:99px; border:1px solid var(--line);
-       color:var(--muted); margin-left:6px; }
-.tag.warn { color:var(--warn); border-color:var(--warn); }
-.tag.ok { color:var(--ok); border-color:var(--ok); }
-.tag.bad { color:var(--bad); border-color:var(--bad); }
-.row { display:flex; gap:8px; align-items:center; margin-top:8px; }
-.row audio { flex:1; min-width:0; height:34px; }
-.decide, .dl { display:flex; gap:6px; flex-shrink:0; }
-h2 { font-size:17px; margin:28px 0 4px; }
-details { margin-top:24px; }
-details li { margin:2px 0; }
-@media (max-width:640px) { .row { flex-wrap:wrap; } .row audio { order:-1; flex-basis:100%; } .dl { margin-left:auto; } }
-</style></head>
-<body><main>
-<h1 id="h"></h1>
-<div class="muted" id="sub"></div>
-<div class="bar">
-  <span id="scan"></span>
-  <span>Prime candidates (not rejected): <b id="good"></b> / <b id="target"></b> · backups: <b id="backups"></b></span>
-  <span>Kept: <b id="kept"></b> · rejected: <b id="rejected"></b></span>
-  <button onclick="post('scan_more', {n: 10})">Scan 10 more</button>
-  <span style="flex:1"></span>
-  <span>Downloaded: <b id="done"></b></span>
-  <input type="number" id="n" min="1"> <button class="primary" onclick="downloadN()">Download N</button>
-</div>
-<div id="complete" hidden></div>
-<p class="muted" id="prime-note"></p>
-<p class="muted" id="empty">No prime candidates yet.</p>
-<div id="list"></div>
-<div id="backup-wrap" hidden>
-  <h2>Backups</h2>
-  <p class="muted">Only 64 kbps, or no section in the length range. Not counted toward the goal. Downloaded by
-    "Download N" only once the listing is exhausted and no prime candidate is left.</p>
-  <div id="backup"></div>
-</div>
-<details><summary class="muted" id="skipsum"></summary><ul id="skips"></ul></details>
-</main>
-<script>
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const mins = s => s == null ? "?" : (s / 60).toFixed(1) + " min";
-const cards = new Map();  // project URL -> {el, html, src, box}; each card is built once so its player keeps playing
-let first = true;
-
-async function post(path, body) {
-  await fetch("/api/" + path, {method: "POST", headers: {"Content-Type": "application/json"},
-                               body: JSON.stringify(body)});
-  refresh();
-}
-function downloadN() { post("download_n", {n: parseInt($("n").value) || 0}); }
-
-// Player errors can be transient; fallback is reversible through Retry 128 kbps.
-for (const box of [$("list"), $("backup")]) {
-  box.addEventListener("click", e => {
-    const b = e.target.closest("button[data-act]");
-    if (!b) return;
-    const url = b.closest(".card").dataset.url;
-    if (b.dataset.act === "keep") post("decide", {url, decision: "keep"});
-    if (b.dataset.act === "reject") post("decide", {url, decision: "reject"});
-    if (b.dataset.act === "undo") post("decide", {url, decision: null});
-    if (b.dataset.act === "download") post("download", {url});
-    if (b.dataset.act === "retry_128") post("retry_128", {url});
-  });
-  box.addEventListener("error", e => {
-    if (e.target.tagName === "AUDIO" && e.target.dataset.q === "128")
-      post("missing_128", {url: e.target.closest(".card").dataset.url});
-  }, true);
-}
-
-// A card's text, its keep / reject buttons (left of the player) and its download button (right of it).
-function parts(c) {
-  const sec = c.section, d = c.download, rejected = c.decision === "reject", kept = c.decision === "keep";
-  const tags = [`<span class="tag">${esc(c.type)}</span>`,
-    kept ? `<span class="tag ok">kept</span>` : "",
-    c.quality === "128" ? `<span class="tag ok">128 kbps</span>` : `<span class="tag warn">64 kbps</span>`,
-    c.in_range ? "" : `<span class="tag warn">outside length range</span>`,
-    d ? `<span class="tag ${d.status === "done" ? "ok" : d.status === "failed" ? "bad" : ""}">${esc(d.status)}</span>` : ""
-  ].join("");
-  return {
-    info: `<div class="title"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>${tags}</div>
-      <div class="muted">${esc(sec.title)} · ${mins(sec.seconds)} ·
-        ${c.solo_sections} of ${c.sections_total} sections solo
-        ${d && d.error ? " · " + esc(d.error) : ""}${c.missing_128 ? " · 128 kbps attempt failed: " + esc(c.missing_128.why) : ""}</div>`,
-    // toggles: the selected one is coloured, and clicking it again clears the decision
-    decide: `<button class="keep${kept ? " on" : ""}" aria-pressed="${kept}" data-act="${kept ? "undo" : "keep"}">Keep</button>` +
-      `<button class="reject${rejected ? " on" : ""}" aria-pressed="${rejected}" data-act="${rejected ? "undo" : "reject"}">Reject</button>`,
-    dl: ((!rejected && !(d && (["queued", "downloading"].includes(d.status) ||
-          (d.status === "done" && d.quality === c.quality)))) ? `<button data-act="download">Download</button>` : "") +
-      (c.missing_128 && sec.url128 && !(d && ["queued", "downloading"].includes(d.status)) ?
-        `<button data-act="retry_128">Retry 128 kbps</button>` : ""),
-  };
-}
-
-function render(candidates) {
-  $("empty").hidden = candidates.some(c => c.prime);
-  $("backup-wrap").hidden = candidates.every(c => c.prime);
-  for (const c of candidates) {  // candidates are only ever appended, so order is stable
-    let k = cards.get(c.url);
-    if (!k) {
-      const el = document.createElement("div");
-      el.className = "card"; el.dataset.url = c.url;
-      el.innerHTML = `<div class="info"></div>
-        <div class="row"><div class="decide"></div><audio controls preload="none"></audio><div class="dl"></div></div>`;
-      k = {el, html: {}, src: null, box: null};
-      cards.set(c.url, k);
-    }
-    const html = parts(c), src = c.quality === "128" ? c.section.url128 : c.section.url64;
-    for (const [part, h] of Object.entries(html))  // only touch what changed, never the player
-      if (h !== k.html[part]) { k.el.querySelector("." + part).innerHTML = h; k.html[part] = h; }
-    if (src !== k.src) {  // new, or downgraded to 64 kbps
-      const a = k.el.querySelector("audio");
-      a.dataset.q = c.quality; a.src = src; k.src = src;
-    }
-    const box = c.prime ? "list" : "backup";
-    if (box !== k.box) { $(box).appendChild(k.el); k.box = box; }  // new, or demoted to a backup
-    k.el.classList.toggle("rejected", c.decision === "reject");
-    k.el.classList.toggle("kept", c.decision === "keep");
-  }
-}
-
-async function refresh() {
-  const s = await (await fetch("/api/state")).json();
-  if (first) {
-    $("h").textContent = s.reader;
-    $("sub").innerHTML = `<a href="${esc(s.reader_url)}" target="_blank" rel="noopener">${esc(s.reader_url)}</a>` +
-      ` · saving to ${esc(s.out)}`;
-    $("n").value = s.want_downloads || s.default_n;
-    $("prime-note").textContent = `Prime: a section ${s.range[0]}–${s.range[1]} min long, at 128 kbps.`;
-    first = false;
-  }
-  $("scan").innerHTML = `${esc(s.status)} · listing page <b>${s.page}</b> · <b>${s.checked}</b> projects checked`;
-  $("good").textContent = s.good_prime; $("target").textContent = s.target;
-  $("backups").textContent = s.candidates.filter(c => !c.prime && c.decision !== "reject").length;
-  $("kept").textContent = s.candidates.filter(c => c.decision === "keep").length;
-  $("rejected").textContent = s.candidates.filter(c => c.decision === "reject").length;
-  $("done").textContent = s.downloaded + (s.want_downloads ? " of " + s.want_downloads : "");
-  const complete = s.want_downloads > 0 && s.downloaded >= s.want_downloads;  // "Download N" has finished
-  document.body.classList.toggle("done", complete);
-  $("complete").hidden = !complete;
-  if (complete) $("complete").innerHTML = `🎉 All ${s.want_downloads} downloads completed` +
-    `<span class="muted">Saved to ${esc(s.out)}</span>`;
-  render(s.candidates);
-  $("skipsum").textContent = `Skipped projects (${s.skips.length})`;
-  $("skips").innerHTML = s.skips.map(k =>
-    `<li><a href="${esc(k.url)}" target="_blank" rel="noopener">${esc(k.title)}</a>
-     <span class="muted">[${esc(k.type)}] ${esc(k.reason)}</span></li>`).join("");
-}
-refresh(); setInterval(refresh, 1500);
-</script></body></html>
-"""
-
+# ---------------------------------------------------------------- shared dashboard
 
 def make_handler(st):
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *a):
-            pass
-
-        def send(self, code, body, ctype):
-            data = body.encode("utf-8")
-            self.send_response(code)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-
-        def do_GET(self):
-            if self.path == "/":
-                self.send(200, PAGE, "text/html; charset=utf-8")
-            elif self.path == "/api/state":
-                self.send(200, st.snapshot(), "application/json")
-            else:
-                self.send(404, "not found", "text/plain")
-
-        def do_POST(self):
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-            with st.lock:
-                c = st.find(body.get("url", ""))
-                if self.path == "/api/decide" and c:
-                    if body.get("decision") not in ("keep", "reject", None):
-                        self.send(400, "bad decision", "text/plain")
-                        return
-                    c["decision"], c["decided_at"] = body.get("decision"), now()
-                    if c["decision"] == "reject" and c["url"] in st.queue:
-                        st.queue.remove(c["url"])
-                        if c["download"] and c["download"]["status"] == "queued":
-                            c["download"] = None
-                elif self.path == "/api/download" and c:
-                    st.enqueue(c)
-                elif self.path == "/api/download_n":
-                    st.want_downloads = max(0, int(body.get("n", 0)))
-                elif self.path == "/api/scan_more":
-                    st.target += max(0, int(body.get("n", 0)))
-                elif self.path == "/api/missing_128" and c:
-                    if c["quality"] == "128":
-                        st.mark_128_missing(c, "player couldn't load it (possibly a temporary connection error)")
-                elif self.path == "/api/retry_128" and c and c["section"]["url128"]:
-                    if c["download"] and c["download"]["status"] in ("queued", "downloading"):
-                        self.send(409, "wait for the current download to finish", "text/plain")
-                        return
-                    c["quality"] = "128"
-                    c.pop("missing_128", None)
-                else:
-                    self.send(404, "not found", "text/plain")
-                    return
-                st.save()
-            st.wake.set()
-            self.send(200, "{}", "application/json")
-
-    return Handler
+    """Single-reader API compatibility, using the shared dashboard and review controls."""
+    from librivox_dashboard import Dashboard, make_handler as dashboard_handler
+    return dashboard_handler(Dashboard.for_interactive(st))
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -692,17 +473,10 @@ def main():
 
     rid = reader_id(args.url)
     st = State(args, rid, Path(args.out or Path(__file__).parent / "downloads" / slug(args.name)))
-    server = LocalServer(("127.0.0.1", args.port), make_handler(st))
-    threading.Thread(target=scanner, args=(st,), daemon=True).start()
-    threading.Thread(target=downloader, args=(st,), daemon=True).start()
-    print(f"{args.name} (reader {rid}): open http://127.0.0.1:{args.port}/  (Ctrl+C to stop)")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+    from librivox_dashboard import Dashboard, serve_dashboard
+    serve_dashboard(Dashboard.for_interactive(st), args.port)
 
 
 if __name__ == "__main__":
+    sys.modules.setdefault("librivox_fetch", sys.modules[__name__])
     main()

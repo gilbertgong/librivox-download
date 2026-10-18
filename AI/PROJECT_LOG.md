@@ -200,3 +200,39 @@ completed resumption, incompatible-state preservation, fallback, bounded failure
 time budgets, interruption/recovery and CLI summary/exit codes. A live CLI smoke collected one recording in fresh
 scratch output and exited successfully; rerunning the same configuration verified completed resumption. No existing
 user recordings/state were used as fixtures. No full catalog survey, subjective listening or downstream training.
+
+## 2026-10-18: shared Overview and Review dashboard
+
+The user refined batch collection into the primary workflow with the same dashboard for single-reader use.
+Agreed on two navigable pages: Overview for per-reader progress/counts/errors and collection controls, and
+Review for everything in saved state, grouped by reader/project and filterable by status/decision/reader.
+The proposed saved HTML index was dropped in favor of reopening saved state directly.
+
+Added `librivox_dashboard.py` and `dashboard.html`; removed the old embedded single-reader page and routed both
+commands to the shared interface. Default batch startup binds the loopback server before starting a sequential
+collection worker and stays open after completion. `--headless` preserves the exiting JSON-summary workflow.
+`--review PATH` loads an output root, reader directory or state file without scanning, downloading, queue recovery
+or completion rewrites on startup. Local audio is served from saved paths within the reader directory, with
+HEAD/range support for seeking. Missing files are labeled in the view without changing saved state just by viewing.
+
+Keep/Mark bad/Clear decision writes back to the existing state and preserves other fields, transfer records and
+files. Full saved state and skipped reasons remain expandable. State save preserves unknown metadata; live
+collection/review share locks and atomically register the active State to prevent stale decision writes from
+overwriting a transfer. Polling updates existing cards without replacing audio elements.
+
+Review-only mode exposes no collection controls. Completed readers remain idle after a bad decision; explicit
+Collect / resume fills targets. During active collection, rejected files don't count toward the requested total.
+Pause stops between operations and leaves subsequent readers unstarted. Closing the server requests a stop and
+waits for workers; in-flight network operations still obey their connection/read timeouts. Single-reader mode
+keeps candidate scanning/source previews and explicit per-card downloads, but its idle worker doesn't restart
+collection merely because a recording was rejected. The dashboard's normal exit0 indicates server shutdown,
+while headless outcome codes retain their original meaning.
+
+Validation: 38 offline tests pass, including all previous tests and dashboard state-only/legacy review,
+decision persistence, local media HEAD/ranges/missing paths, path containment, explicit replacement, live
+decision/transfer synchronization, pause, CLI routing and binding before work. Browser checks with isolated
+synthetic audio passed Overview-to-reader navigation, filters, Mark bad/Clear persistence after reload, actual
+local playback, phone-width layout without horizontal overflow, and a clean console. Real batch/single-reader
+CLI entry points showed the shared dashboard using scratch collections, with batch completion and explicit
+resume leaving the server available. Test servers stopped; existing user output wasn't used as a fixture,
+and research jobs were left alone.

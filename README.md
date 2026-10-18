@@ -1,35 +1,57 @@
 # librivox-download
 
-Find a LibriVox reader's solo recordings, one sample per project, vet them by ear on a local web page, and download
-samples you haven't rejected, preferring 128 kbps MP3s with 64 kbps fallback.
-
+Collect a LibriVox reader's solo recordings, one sample per project, and review them in a local dashboard.
+Give it a JSON list of readers to collect sequentially, then listen and mark recordings to keep or reject.
 Python 3.12, standard library only.
 
-## Usage
+## Collect a batch
 
-```
-python librivox_fetch.py "Beth Thomas" https://librivox.org/reader/6281/
-```
-
-Then open http://127.0.0.1:8765/. Stop the server with Ctrl+C; running it again resumes where it left off.
-Individual download requests and unfinished bulk targets survive restarts. Interrupted transfers restart from
-the beginning; they do not resume from a byte offset. Use a separate `--out` for another reader or new filters.
-
-## Batch downloads
-
-For unattended collection from several readers, copy [batch.example.json](batch.example.json) to
-`batch.local.json`, replace the example readers with your choices, and run:
+Copy [batch.example.json](batch.example.json) to `batch.local.json`, replace the example readers, then run
+these commands from the repo root:
 
 ```sh
 python -B librivox_batch.py batch.local.json --dry-run
 python -B librivox_batch.py batch.local.json
 ```
 
-Batch mode runs without a browser or web server. Readers are processed sequentially, one section per project,
-using the same selection and 128/64 kbps fallback rules. It stops downloading for each reader when their total
-count is reached. Backups are used only after the listing is exhausted. It doesn't make listening judgments.
+Open the printed address (default http://127.0.0.1:8765/). Collection starts automatically. The dashboard stays
+open after all readers finish; Ctrl+C closes it. Use `--port 8766` if another instance uses the default port.
+The dry run validates and prints resolved jobs without writing output or contacting remote services.
 
-The JSON has an optional `defaults` object, an `output_root`, and a nonempty `readers` list. Each reader supplies
+## Two dashboard pages
+
+- **Overview:** reader progress, current activity/errors, requested totals, downloaded/available/rejected counts,
+  and links to review all recordings or one reader. Collect / resume starts another pass for all readers or the
+  selected reader. Pause collection stops after the current operation, keeping its progress.
+- **Review:** all saved candidates grouped by reader/project, local audio players, section lengths and qualities,
+  source links, download statuses/errors, and Keep / Mark bad / Clear decision. Filter by reader, download status
+  or decision. Expand skipped projects for reasons, recording details for individual metadata, and saved state
+  details for everything else in `state.json`. Polling doesn't replace audio players while you're listening.
+
+Mark bad records the existing rejection decision; it never deletes the audio. Available means a completed file
+exists and isn't rejected, not that someone has listened and approved it. During active collection, rejected
+files don't count toward the target. Once a reader finishes, marking something bad **does not restart collection**.
+Use Collect / resume explicitly to fill the target with replacements. The last collection result and the current
+available count are shown separately.
+
+## Reopen for review
+
+```sh
+python -B librivox_batch.py --review downloads
+```
+
+The path may be an output root containing reader folders, a single reader directory, or a `state.json` file.
+Review mode starts no scanning or downloading and doesn't change state merely by opening it. Decisions you make
+are saved back to the existing state files, preserving other metadata. Legacy state without selection settings
+can also be reviewed. Collection controls are unavailable: open the batch JSON to collect replacements.
+
+Local players use the saved files, with seeking support. Missing files are labeled; source URLs remain available
+as links. There is no generated HTML index or separate review database. The dashboard reconstructs its view from
+saved state, so you can close it and reopen it later. It binds only to this computer's loopback address.
+
+## Batch JSON
+
+The file has an optional `defaults` object, an `output_root`, and a nonempty `readers` list. Each reader supplies
 `url`, optionally `name`, and any overrides of the defaults. Without a name, the display label is `Reader ID`.
 The sample IDs/names in the example are placeholders to replace before collection.
 
@@ -42,82 +64,79 @@ The sample IDs/names in the example are placeholders to replace before collectio
 | `order` | `alpha` | listing order: `alpha` or `catalog_date` |
 | `timeout_minutes` | 60 | per-reader budget, checked between operations |
 
-`output_root` defaults to `downloads` **relative to the batch JSON file**, independent of the working directory.
-Each reader gets `<output_root>/<reader_id>/state.json` and project audio subdirectories. Reader IDs remain
-stable when names change. Duplicate IDs and invalid settings are rejected before collection begins.
+`output_root` defaults to `downloads` **relative to the JSON file**, independent of the working directory.
+Each reader gets `<output_root>/<reader_id>/state.json` and project audio subdirectories. Reader IDs stay stable
+when names change. Duplicate IDs and invalid settings are rejected before collection begins.
 
-Run the same batch again to resume. Failed transfers receive one new attempt per invocation; failures are not
-retried indefinitely within a run. Existing files and decisions are preserved. Saved state must belong to that
-reader and record matching selection settings; older state without settings or a changed language/range/minimum/
-order is refused with a message to choose a new output root. Count and time budget can change on resumption.
-Do not run two processes against the same output directory at once.
+Run the same batch again or use Collect / resume to continue. Failed transfers receive one new attempt per
+invocation/pass; failures aren't retried indefinitely. Existing files and listening decisions are preserved.
+Collection requires state with the same reader and recorded selection settings. Older state with unknown
+filters, or changed language/range/minimum/order, requires a new output root; existing data remains reviewable.
+Count and time budget may change on resumption. Do not run two processes against the same output directory.
 
-Progress is printed to stderr; the final JSON summary is printed to stdout, so it can be saved separately:
+## Headless collection
+
+For an assistant or script that needs a command which exits when collection finishes:
 
 ```sh
-python -B librivox_batch.py batch.local.json > batch-summary.local.json
+python -B librivox_batch.py batch.local.json --headless > batch-summary.local.json
 ```
 
-Each reader is reported as `completed`, `insufficient`, `failed`, or `interrupted`; readers remaining after
-Ctrl+C are `not_run`. Failures and insufficient results allow the next reader to proceed. Exit status is 0 if
-all targets are met, 1 for incomplete/failed readers, 2 for invalid configuration, or 130 for interruption.
-An operation already in progress may finish after the configured time budget; network calls retain their
-existing connection/read timeouts. Ctrl+C stops the batch without leaving background workers or a server.
-Per-reader state remains the authoritative record; the final summary is an outcome report for that invocation.
+Progress goes to stderr and the final JSON summary goes to stdout. Each reader reports `completed`,
+`insufficient`, `failed`, or `interrupted`; remaining readers after Ctrl+C are `not_run`. Failures and insufficient
+results allow the next reader to proceed. Exit status is 0 if all targets are met, 1 for incomplete/failed
+readers, 2 for invalid configuration, or 130 for interruption. These outcome codes apply to headless mode;
+closing a dashboard normally returns 0, and collection outcomes remain on its Overview page.
 
-## How it works
+An operation already in progress may finish after a pause request or time budget. Existing connection/read
+timeouts govern in-flight network operations. Ctrl+C requests a stop and waits for the current operation;
+Ctrl+C again forces shutdown. Interrupted transfer intent remains saved for resumption. No worker/server is
+left running after normal shutdown. The final headless summary is an outcome report for that invocation;
+per-reader state is authoritative. Personal `*.local.json` batch files and reports are ignored by Git.
 
-- The reader's project listing is scanned in the background. A project is a candidate if one of its sections is
-  read by this reader alone and is at least a minute long. Dramatic readings, other languages, and projects that
-  don't list readers per section are skipped.
-- Each candidate offers one section: the first 5–15 minutes long, or the closest to that range.
-- A candidate is **prime** if that section is in the range and has a 128 kbps file. The rest are **backups**: no
-  section in the range, or only 64 kbps (no 128 kbps file, or it failed to play or download). Backups are listed
-  below the prime candidates and don't count toward the target.
-- Scanning stops at 20 prime candidates that you haven't rejected. Rejecting one makes it look further;
-  "Scan 10 more" raises the target.
-- The page shows progress (including how many you've kept and rejected), a card per candidate (section, length, and Keep / Reject left of the player, Download right of it), the backups,
-  and the skipped projects with reasons. Keep marks a sample you've listened to and approved.
-- "Download N" (default 10) has the server download the first N candidates you haven't rejected, prime first;
-  backups only if the reader's listing runs out of prime candidates. When all N are done, the page turns pale
-  blue and says so.
-- An individual Download request tries 64 kbps automatically if its 128 kbps transfer fails. After a playback
-  error, Retry 128 kbps lets you try that player URL again; an error can be temporary. If you've already downloaded
-  64 kbps, click Download after retrying to request the 128 kbps version. Existing recordings are kept.
-- Completed downloads count only while their recorded files exist. Missing files are marked on their cards
-  and can be downloaded again; an unfinished bulk target also restores missing eligible samples.
+## How recordings are selected
 
-## Options
+All selection metadata comes from LibriVox; the audio host is contacted only for chosen playback/download URLs.
+A project is eligible if a section lists exactly the requested reader and meets the minimum length. Dramatic
+readings, other languages, and pages without individual section readers are skipped. Collaborative books are fine.
 
-| Option | Default | |
+Each project offers the first section in the preferred range, otherwise the closest eligible section. In-range
+128 kbps candidates are prime; other candidates are backups. Collection prefers primes and uses backups only
+after the listing is exhausted. A 128 kbps transfer failure makes a candidate eligible for 64 kbps fallback.
+Keep is a listening annotation, not a download prerequisite. No transcripts are downloaded or listening judgments
+made automatically.
+
+## Ad hoc single-reader use
+
+```sh
+python -B librivox_fetch.py "READER NAME" https://librivox.org/reader/READER_ID/
+```
+
+This opens the same dashboard and scans for candidates. On Overview, choose a total and Collect / resume, or
+use Download on a Review card. Single-reader mode also offers remote source previews for undownloaded candidates,
+Retry 128 kbps after a failed preview, and Scan 10 more. Completed recordings play from disk.
+
+| Option | Default | Meaning |
 |---|---|---|
-| `--projects` | 20 | prime candidates to find |
-| `--count` | 10 | the page's default N for "Download N" |
-| `--range MIN MAX` | 5 15 | preferred section length, minutes |
-| `--min-seconds` | 60 | never offer a shorter section |
-| `--out` | `downloads/<name>` | output folder (the default is next to the script) |
-| `--order` | alpha | listing order: `alpha` or `catalog_date` |
-| `--language` | English | `''` for any |
-| `--port` | 8765 | |
+| `--projects` | 20 | prime candidates to gather for browsing |
+| `--count` | 10 | initial collection total shown in the dashboard |
+| `--range MIN MAX` | 5 15 | preferred length in minutes |
+| `--min-seconds` | 60 | minimum section length |
+| `--out` | `downloads/<name>` | output folder, default next to the script |
+| `--order` | alpha | `alpha` or `catalog_date` |
+| `--language` | English | empty string permits any |
+| `--port` | 8765 | loopback dashboard port |
 
-## Output
-
-- `<out>/<project>/`: the downloaded MP3.
-- `<out>/state.json`: the record of everything: each project checked (and why it was skipped), each candidate's
-  chosen section, your keep / reject decisions, queued requests and each download, with the time of each change.
-
-Rejecting a downloaded sample doesn't delete it. Keep is a listening annotation; Download N takes any candidate
-you haven't rejected, and N includes samples already downloaded in this output directory.
+Queued individual requests and unfinished collection targets survive restarts. Transfers restart from the
+beginning of their `.part` file rather than resuming byte offsets. Use a new output directory for a different
+reader or changed selection filters. Existing files are never deleted by Keep/Mark bad/quality changes.
 
 ## Checks and assistant help
-
-Run the offline regression checks from the repo root:
 
 ```sh
 python -B -m unittest discover -s tests -v
 ```
 
-They cover interactive and batch workflows using temporary files and local HTTP fixtures, with no third-party
-dependencies or external requests. Personal `*.local.json` batch files/reports are ignored by Git.
-For assistant-guided setup, smoke tests and downloads, see [AI/USAGE.md](AI/USAGE.md).
-[AI/STRATEGY.md](AI/STRATEGY.md) describes how the repo keeps context for AI-assisted work.
+Tests cover collection and review using temporary files and local HTTP fixtures; no third-party dependencies
+or external requests. [AI/USAGE.md](AI/USAGE.md) describes assistant-guided setup, collection and review.
+[AI/STRATEGY.md](AI/STRATEGY.md) explains how the repo keeps context for AI-assisted work.

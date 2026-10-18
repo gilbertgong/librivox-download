@@ -9,8 +9,9 @@ different recording sessions; downstream training and held-out splits remain the
 ## Current direction
 
 Keep the Python 3.12 standard-library tool and its existing selection rules. The interactive script also
-provides shared state, scanning and transfer functions; a thin JSON batch command coordinates sequential
-headless collection. No package installation or build step is needed.
+provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
+batch and ad hoc single-reader commands share a two-page dashboard. Review-only startup loads saved state
+without starting collection. A headless option remains for automation. No installation/build step is needed.
 
 ## Approach and reasons
 
@@ -39,10 +40,19 @@ headless collection. No package installation or build step is needed.
 - Bind the loopback server before starting workers and reject duplicate port use, including on Windows, so a
   second launch cannot silently compete with an existing session.
 - Batch mode stops at each reader's requested total, resumes by reader ID and requires matching saved selection
-  settings. It validates the full manifest first, processes one reader at a time without background workers,
+  settings. It validates the full manifest first and processes one reader at a time. Headless mode is synchronous;
+  dashboard mode uses one collection worker with shared state locks,
   reports insufficiency separately from failures, and continues after individual failures. A configurable
   per-reader time budget is checked between operations. Only actual listing exhaustion permits batch backups.
   This keeps AI-assisted collection bounded and observable while reusing the existing selection/transfer logic.
+- Overview summarizes reader activity/errors/counts and explicit collection controls. Review presents all saved
+  candidates, local players, decision/status/reader filters, skipped reasons and expandable full state. Review
+  reads legacy state without conversion or side effects. Keep/Mark bad/Clear writes only the requested decision
+  and timestamp, preserving other metadata and recordings. There is no saved HTML index or review database.
+- Completed readers stay idle when a recording is marked bad; Collect / resume explicitly fills their target.
+  During active collection, rejected recordings don't count toward its total. Pause/shutdown stop between
+  operations and wait for in-flight work; the dashboard remains open when a batch completes. Loopback audio
+  serving supports seeking and stays inside each reader's output directory.
 
 ## Results so far
 
@@ -53,12 +63,14 @@ See the latest dated log entry for validation of the maintenance changes and its
 
 ## Orientation
 
-- `librivox_fetch.py`: LibriVox parsing/selection, State, scanner and downloader, embedded HTML/JavaScript, API,
-  and CLI. `download_next` performs one bounded transfer; `downloader` runs it in the background.
+- `librivox_fetch.py`: parsing/selection, State, scanner/downloader, single-reader CLI and compatibility API.
+  `download_next` performs one bounded transfer; `downloader` runs explicit requests/active collections.
+- `librivox_dashboard.py` and `dashboard.html`: shared Overview/Review server, UI, local audio and decisions.
 - `tests/test_librivox_fetch.py`: isolated standard-library tests with temporary output and local HTTP fixtures.
 - `librivox_batch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
 - `batch.example.json`: example defaults, reader overrides and output root; copy to an ignored `*.local.json`.
 - `tests/test_batch.py`: offline batch validation, local HTTP collection, resume, failure and interruption tests.
+- `tests/test_dashboard.py`: state-only review, media ranges, decisions, concurrent collection and CLI controls.
 - `README.md`: running the tool, options and output.
 - `AI/USAGE.md`: assistant instructions for setup, smoke tests and normal use.
 - `AI/PROJECT_LOG.md`: initial design record and dated maintenance history.
@@ -79,7 +91,7 @@ See the latest dated log entry for validation of the maintenance changes and its
 
 ## Open questions and next steps
 
-No implementation decision is waiting on the user. JSON batch collection is implemented and tested offline;
-use the tool for the next requested sample collection, keeping any
+No implementation decision is waiting on the user. Shared collection/review dashboard and JSON batch mode
+are implemented and tested. Use the tool for the next requested sample collection, keeping any
 downstream dataset placement or training/held-out split separate from download selection. Revisit parsing or
 recovery only when actual use reveals another problem.

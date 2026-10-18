@@ -21,7 +21,7 @@ Prerequisite: a local checkout and permission to run a Python interpreter.
 2. Use an existing suitable interpreter. If none exists, explain that Python must be installed and follow the
    user's environment preferences. No third-party Python dependencies, virtual environment, model weights or
    build tools are required.
-3. From the repo root run `python -B librivox_fetch.py --help` with that interpreter.
+3. From the repo root run `python -B librivox_batch.py --help` with that interpreter.
 
 Success: help exits successfully. Do not install unrelated audio/AI libraries.
 
@@ -48,7 +48,8 @@ same selection options; a fresh output directory is appropriate for a new select
 2. Open the printed loopback URL. Check the reader/output and that status progresses from scanning to paused or
    listing exhausted. A stopped/error status is a failure to investigate, not successful exhaustion.
 3. Leave scanning at its normal limits; do not run side queries to survey the reader's entire catalog.
-4. Explain Keep/Reject and the prime/backup split if needed. Keep marks approval; bulk downloading requires only
+4. Use Overview for collection controls and Review for candidates. Explain Keep/Mark bad and the prime/backup
+   split if needed. Keep marks approval; bulk downloading requires only
    that a candidate has not been rejected. Do not make listening decisions for the user.
 
 Success: the UI is reachable, shows the intended reader/output, and offers candidates or explains skips/errors.
@@ -60,7 +61,8 @@ Here, sources means the selected reader's recordings, not models or a separate s
 Prerequisites: find samples above; the user's requested count or individual selection; enough disk space and
 internet access to the audio host. This request includes setup and scanning if they have not already happened.
 
-1. Use Download on a particular card or set N and use Download N in the running UI. Download N means N total
+1. For new multi-reader requests, prefer the batch task below. In single-reader mode, use Download on a Review
+   card or set N and use Collect / resume on Overview. The collection target means N total
    non-rejected completed samples in this output, including earlier downloads; it is not N additional samples.
 2. Watch transfer status. An individual 128 kbps failure automatically tries 64 without another click. Bulk
    downloading favors primes and waits until scanning finishes before using backups.
@@ -92,10 +94,13 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
 4. Run `python -B librivox_batch.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
    This validates the entire configuration without writing output or contacting remote services. Check that no
    other job is using the same output directories before starting actual collection.
-5. Run `python -B librivox_batch.py PATH_TO_BATCH`. To save its JSON summary, redirect stdout to a separate report
-   path; progress remains on stderr. Never redirect onto the batch input or a per-reader state file. Readers run
-   sequentially and the command exits when all readers are handled. It needs no detached server or UI.
-6. Inspect the exit status and each result, then check completed state paths against disk. Report completed,
+5. If the user wants a browsable dashboard, run `python -B librivox_batch.py PATH_TO_BATCH [--port PORT]` and open
+   the printed loopback URL. Collection starts automatically. Overview shows progress and explicit collection/
+   pause controls; Review shows all saved candidates and decisions. The server remains available after completion.
+   If the request is for unattended command execution, use `--headless` so it exits when collection finishes.
+   Only headless mode guarantees a JSON-only stdout summary; progress remains on stderr. To save that summary,
+   redirect stdout to a separate report, never the input JSON or a state file. No custom wrapper is needed.
+6. Inspect each reader's dashboard outcome or the headless exit status/summary, then check saved file paths. Report completed,
    insufficient and failed readers separately. A failed reader does not stop subsequent readers. Time budgets
    are checked between operations, so allow an in-flight request to finish or hit its network timeout.
 7. Rerun the same JSON to resume interrupted work or make another attempt at failed transfers. Changing count or
@@ -103,16 +108,41 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
    selection settings is also refused. Preserve it and choose new output, rather than editing away the check.
 
 Success: all requested targets are met with files present, or a precise partial/failure report explains which
-readers remain incomplete. Exit 0 means all complete; 1 means incomplete/failed, 2 configuration error and 130
-user interruption. Ctrl+C produces a partial summary and marks remaining readers not_run. Stop after that
-request; do not schedule future retries or launch downstream dataset preparation/training without instruction.
+readers remain incomplete. Headless exit 0 means all complete; 1 means incomplete/failed, 2 configuration error
+and 130 interruption. A dashboard's normal exit0 only means it closed normally; inspect reader outcomes.
+Leave the dashboard open when requested for use; otherwise stop your own test server and wait for its current
+operation. Do not schedule future retries or launch downstream dataset preparation/training without instruction.
+
+## Review existing output / mark bad
+
+Prerequisites: setup and the user's existing output root, reader directory or state.json. No batch JSON, internet
+access, migration or new index is needed. This request authorizes opening the dashboard; it doesn't authorize
+making subjective listening decisions or collecting replacements unless the user requests those actions.
+
+1. Run `python -B librivox_batch.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
+   the root state file or immediate reader subdirectories. An empty root is supported; duplicate reader IDs
+   require opening the intended reader directory explicitly. Legacy saved state can be reviewed without conversion.
+2. Overview shows saved readers, counts and last status. Review links preserve the reader selection. Review
+   includes every saved candidate, not only completed downloads. Filter by reader/status/decision and expand
+   skipped projects, recording details or full saved state when needed. Players use local files; missing files
+   are labeled without rewriting the saved completion record simply because the page was opened.
+3. Keep / Mark bad / Clear decision persists to the same state file and preserves recordings and other metadata.
+   Mark bad excludes a file from available counts. It doesn't delete files or start new collection for a
+   completed reader. The user may listen and make these decisions; don't invent approval judgments.
+4. Review-only mode has no collection controls. To collect replacements, open the existing batch JSON and use
+   its requested totals, or Collect / resume for a reader in an already-open collection dashboard. During an
+   active reader's collection, rejected recordings don't count toward its target; a finished reader stays idle.
+5. Close with Ctrl+C when finished, or leave it available if the user requested an ongoing review session.
+
+Success: the saved records and local audio are browsable and requested decisions persist after reload. Opening
+review mode or clearing a decision starts no scanner/downloader. No separate review database or HTML export exists.
 
 ## Live smoke check
 
 Prerequisites: setup, a user-specified reader, internet access, fresh scratch output and a free port.
 
 Start the normal tool with default selection limits and the scratch `--out`/`--port`. Check the UI and a
-Keep/Reject/clear cycle. If the request includes testing downloads, request one offered sample and verify the
+Keep/Mark bad/clear cycle. If the request includes testing downloads, request one offered sample and verify the
 saved file and state; otherwise do not start media transfers. Restart with the same scratch arguments and check
 that decisions and completion persist. Stop the check's own server. Retain scratch recordings unless the user
 has authorized their removal. Judge tool behavior, not the particular reader's candidate distribution.
