@@ -74,6 +74,39 @@ Success: the requested individual transfers are done, or the bulk target is reac
 insufficient eligible candidates exist or a remote request fails, report the actual status rather than claiming
 success. Never raise scan limits or substitute another reader without a reason grounded in the user's request.
 
+## Batch download / collect a list of readers
+
+Prerequisites: setup, the user's reader URLs and target count per reader, output destination, internet access
+and disk space. This task includes preparing the JSON and running the existing batch tool. It requires no
+browser automation, HTTP API orchestration, additional libraries or new wrapper scripts.
+
+1. Read the README's Batch downloads section and `batch.example.json`. Prepare a `*.local.json` batch file using
+   the requested URLs and agreed defaults/overrides. Names are optional; the tool uses reader IDs for directory
+   identity and an ID-based display label when a name is absent. Do not invent names or listening decisions.
+2. Confirm the count is a total number of recordings per reader, not additional recordings or a duration target.
+   The tool takes one section per project. State the existing 64 kbps fallback policy if it matters to the request;
+   strict 128-only collection and automatic transcript collection are not supported by this batch schema.
+3. Set `output_root` explicitly if the user chose a destination. Relative paths are relative to the JSON file.
+   If operating under a role with read-only repository access, place both JSON and output outside the repo and
+   invoke Python with `-B`. Respect that role's authorization boundaries for data collection.
+4. Run `python -B librivox_batch.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
+   This validates the entire configuration without writing output or contacting remote services. Check that no
+   other job is using the same output directories before starting actual collection.
+5. Run `python -B librivox_batch.py PATH_TO_BATCH`. To save its JSON summary, redirect stdout to a separate report
+   path; progress remains on stderr. Never redirect onto the batch input or a per-reader state file. Readers run
+   sequentially and the command exits when all readers are handled. It needs no detached server or UI.
+6. Inspect the exit status and each result, then check completed state paths against disk. Report completed,
+   insufficient and failed readers separately. A failed reader does not stop subsequent readers. Time budgets
+   are checked between operations, so allow an in-flight request to finish or hit its network timeout.
+7. Rerun the same JSON to resume interrupted work or make another attempt at failed transfers. Changing count or
+   timeout is allowed; changing selection filters requires a new output root. Older saved state without recorded
+   selection settings is also refused. Preserve it and choose new output, rather than editing away the check.
+
+Success: all requested targets are met with files present, or a precise partial/failure report explains which
+readers remain incomplete. Exit 0 means all complete; 1 means incomplete/failed, 2 configuration error and 130
+user interruption. Ctrl+C produces a partial summary and marks remaining readers not_run. Stop after that
+request; do not schedule future retries or launch downstream dataset preparation/training without instruction.
+
 ## Live smoke check
 
 Prerequisites: setup, a user-specified reader, internet access, fresh scratch output and a free port.

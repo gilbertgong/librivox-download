@@ -167,3 +167,36 @@ one actual 128 kbps download passed, and the completed file/state survived a ser
 fixture confirmed Retry 128 kbps restores the player selection and moves the card back to the prime list.
 Existing user output was not used as a test fixture. This did not assess subjective playback/audio quality,
 perform a full catalog survey, or exercise every remote failure mode. Normal use remains the next check.
+
+## 2026-10-18: JSON-driven sequential batch collection
+
+The user requested unattended collection for a list of reader URLs through a JSON batch file, especially for
+assistant-assisted use. Added `librivox_batch.py` with defaults/per-reader overrides, whole-manifest validation,
+a no-write/no-network dry run, ID-based output directories and a final machine-readable JSON summary. Names
+are optional and default to ID-based labels without another metadata request. Relative output roots resolve
+against the manifest, so launching from another directory doesn't move the collection.
+
+The runner processes one reader at a time without a web server or background workers. It shares the existing
+selection and transfer functions, including one section per project, prime priority, actual-exhaustion-only
+backup selection and 128/64 fallback. The scanner's per-project logic was extracted into a shared function;
+interactive selection behavior is unchanged. Batch stops once the requested total is met, without collecting
+the interactive UI's extra candidates for listening.
+
+Completion, insufficient eligible results, failures and interruption have distinct summary statuses and exit
+codes. Individual failures permit subsequent readers; Ctrl+C preserves work and marks later readers not_run.
+A per-reader time budget is checked between operations; existing network timeouts still govern in-flight I/O.
+Each invocation retries previously failed transfers once. Existing state remains the single per-reader record,
+including source project/section URLs, decisions and file paths. State now records selection settings; batch
+refuses incompatible readers/filters or legacy state with unknown filters before changing it, requiring new
+output instead. The batch JSON is collection intent; the summary is a report, not a replacement manifest.
+
+Added `batch.example.json`, README command/schema documentation and the AI usage recipe. Personal
+`*.local.json` configurations/reports are ignored. The guide covers read-only repository roles using external
+configuration/output and `-B`, verifying results, and keeping listening judgments and downstream training separate.
+
+Validation: 26 offline regression tests pass (15 existing, 11 batch). Batch checks include two-reader collection
+through local HTTP with actual parsing and file transfers, defaults/overrides, invalid configurations, no-network
+completed resumption, incompatible-state preservation, fallback, bounded failures, insufficiency, listing errors,
+time budgets, interruption/recovery and CLI summary/exit codes. A live CLI smoke collected one recording in fresh
+scratch output and exited successfully; rerunning the same configuration verified completed resumption. No existing
+user recordings/state were used as fixtures. No full catalog survey, subjective listening or downstream training.

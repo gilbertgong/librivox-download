@@ -234,6 +234,7 @@ class State:
         self.out.mkdir(parents=True, exist_ok=True)
         data = {"reader": self.args.name, "reader_id": self.rid, "updated_at": now(), "target": self.target,
                 "want_downloads": self.want_downloads, "queue": self.queue,
+                "selection": selection_options(self.args),
                 "checked": self.checked, "candidates": self.candidates}
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
@@ -295,6 +296,34 @@ class State:
         c["missing_128"] = {"why": why, "at": now()}
 
 
+def selection_options(args):
+    """Selection settings recorded so batch resumption can detect incompatible saved checks."""
+    return {"language": getattr(args, "language", "English"), "range_minutes": args.range,
+            "min_seconds": getattr(args, "min_seconds", 60), "order": getattr(args, "order", "alpha")}
+
+
+def scan_project(st, p):
+    """Check and record one project using the same rules in interactive and batch modes. Lock not held."""
+    with st.lock:
+        if p["url"] in st.checked:
+            return
+    if p["type"] == "Dramatic":
+        reason = "dramatic reading"
+    elif st.args.language and p["language"] != st.args.language:
+        reason = f"language: {p['language']}"
+    else:
+        try:
+            cand, reason = check(p, st.rid, st.args)
+        except Exception as e:
+            cand, reason = None, f"error: {e}"
+    with st.lock:
+        st.checked[p["url"]] = {"title": p["title"], "type": p["type"], "reason": reason}
+        if not reason:
+            st.candidates.append(cand)
+        st.save()
+    st.wake.set()
+
+
 def scanner(st):
     """Read the listing and check projects while there are fewer than `target` prime candidates."""
     args = st.args
@@ -311,24 +340,7 @@ def scanner(st):
                         break
                     st.wake.wait(2)
                     st.wake.clear()
-                with st.lock:
-                    if p["url"] in st.checked:
-                        continue
-                if p["type"] == "Dramatic":
-                    reason = "dramatic reading"
-                elif args.language and p["language"] != args.language:
-                    reason = f"language: {p['language']}"
-                else:
-                    try:
-                        cand, reason = check(p, st.rid, args)
-                    except Exception as e:  # one broken project page shouldn't end the scan
-                        cand, reason = None, f"error: {e}"
-                with st.lock:
-                    st.checked[p["url"]] = {"title": p["title"], "type": p["type"], "reason": reason}
-                    if not reason:
-                        st.candidates.append(cand)
-                    st.save()
-                st.wake.set()  # the downloader may be waiting for candidates
+                scan_project(st, p)
         with st.lock:
             st.status = "done: listing exhausted"
     except Exception as e:

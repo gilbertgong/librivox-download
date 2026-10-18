@@ -3,13 +3,14 @@
 ## Goal
 
 Gather one solo section per LibriVox project for a chosen reader, listen and record decisions in a local web UI,
-and download a varied set of samples. Different projects provide different recording sessions; downstream
-training and held-out splits remain the user's decision.
+and download a varied set of samples, interactively or from a JSON list of readers. Different projects provide
+different recording sessions; downstream training and held-out splits remain the user's decision.
 
 ## Current direction
 
-Keep the single-script, Python 3.12 standard-library tool. Harden the existing workflow and document it without
-changing the reader, section or prime/backup selection rules. No package installation or build step is needed.
+Keep the Python 3.12 standard-library tool and its existing selection rules. The interactive script also
+provides shared state, scanning and transfer functions; a thin JSON batch command coordinates sequential
+headless collection. No package installation or build step is needed.
 
 ## Approach and reasons
 
@@ -37,6 +38,11 @@ changing the reader, section or prime/backup selection rules. No package install
   Both audio files remain on disk after an upgrade.
 - Bind the loopback server before starting workers and reject duplicate port use, including on Windows, so a
   second launch cannot silently compete with an existing session.
+- Batch mode stops at each reader's requested total, resumes by reader ID and requires matching saved selection
+  settings. It validates the full manifest first, processes one reader at a time without background workers,
+  reports insufficiency separately from failures, and continues after individual failures. A configurable
+  per-reader time budget is checked between operations. Only actual listing exhaustion permits batch backups.
+  This keeps AI-assisted collection bounded and observable while reusing the existing selection/transfer logic.
 
 ## Results so far
 
@@ -50,6 +56,9 @@ See the latest dated log entry for validation of the maintenance changes and its
 - `librivox_fetch.py`: LibriVox parsing/selection, State, scanner and downloader, embedded HTML/JavaScript, API,
   and CLI. `download_next` performs one bounded transfer; `downloader` runs it in the background.
 - `tests/test_librivox_fetch.py`: isolated standard-library tests with temporary output and local HTTP fixtures.
+- `librivox_batch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
+- `batch.example.json`: example defaults, reader overrides and output root; copy to an ignored `*.local.json`.
+- `tests/test_batch.py`: offline batch validation, local HTTP collection, resume, failure and interruption tests.
 - `README.md`: running the tool, options and output.
 - `AI/USAGE.md`: assistant instructions for setup, smoke tests and normal use.
 - `AI/PROJECT_LOG.md`: initial design record and dated maintenance history.
@@ -63,11 +72,14 @@ See the latest dated log entry for validation of the maintenance changes and its
   treats that as scanning finished, which also permits bulk backups. Read the UI status before judging coverage.
 - Completion checks confirm that the recorded file exists, not that MP3 content is valid or unmodified.
 - A 64 kbps transfer failure stays failed until manually requested again; there is no unlimited retry loop.
+- Batch mode retries failed transfers once on the next invocation. Its time budget is checked between
+  operations, not a hard interruption of an in-flight network operation. No concurrent writers to one output.
 - Reuse an output directory for the same reader and selection options. Existing checked projects are not
   re-evaluated when CLI filters change; use a fresh `--out` to make a new selection.
 
 ## Open questions and next steps
 
-No implementation decision is waiting on the user. Use the tool for the next sample collection, keeping any
+No implementation decision is waiting on the user. JSON batch collection is implemented and tested offline;
+use the tool for the next requested sample collection, keeping any
 downstream dataset placement or training/held-out split separate from download selection. Revisit parsing or
 recovery only when actual use reveals another problem.

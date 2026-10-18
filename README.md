@@ -15,6 +15,56 @@ Then open http://127.0.0.1:8765/. Stop the server with Ctrl+C; running it again 
 Individual download requests and unfinished bulk targets survive restarts. Interrupted transfers restart from
 the beginning; they do not resume from a byte offset. Use a separate `--out` for another reader or new filters.
 
+## Batch downloads
+
+For unattended collection from several readers, copy [batch.example.json](batch.example.json) to
+`batch.local.json`, replace the example readers with your choices, and run:
+
+```sh
+python -B librivox_batch.py batch.local.json --dry-run
+python -B librivox_batch.py batch.local.json
+```
+
+Batch mode runs without a browser or web server. Readers are processed sequentially, one section per project,
+using the same selection and 128/64 kbps fallback rules. It stops downloading for each reader when their total
+count is reached. Backups are used only after the listing is exhausted. It doesn't make listening judgments.
+
+The JSON has an optional `defaults` object, an `output_root`, and a nonempty `readers` list. Each reader supplies
+`url`, optionally `name`, and any overrides of the defaults. Without a name, the display label is `Reader ID`.
+The sample IDs/names in the example are placeholders to replace before collection.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `count` | 10 | total non-rejected completed recordings per reader, including earlier downloads |
+| `language` | `English` | project language; empty string permits any |
+| `range_minutes` | `[5, 15]` | preferred section length; closest eligible section is a backup |
+| `min_seconds` | 60 | minimum section length |
+| `order` | `alpha` | listing order: `alpha` or `catalog_date` |
+| `timeout_minutes` | 60 | per-reader budget, checked between operations |
+
+`output_root` defaults to `downloads` **relative to the batch JSON file**, independent of the working directory.
+Each reader gets `<output_root>/<reader_id>/state.json` and project audio subdirectories. Reader IDs remain
+stable when names change. Duplicate IDs and invalid settings are rejected before collection begins.
+
+Run the same batch again to resume. Failed transfers receive one new attempt per invocation; failures are not
+retried indefinitely within a run. Existing files and decisions are preserved. Saved state must belong to that
+reader and record matching selection settings; older state without settings or a changed language/range/minimum/
+order is refused with a message to choose a new output root. Count and time budget can change on resumption.
+Do not run two processes against the same output directory at once.
+
+Progress is printed to stderr; the final JSON summary is printed to stdout, so it can be saved separately:
+
+```sh
+python -B librivox_batch.py batch.local.json > batch-summary.local.json
+```
+
+Each reader is reported as `completed`, `insufficient`, `failed`, or `interrupted`; readers remaining after
+Ctrl+C are `not_run`. Failures and insufficient results allow the next reader to proceed. Exit status is 0 if
+all targets are met, 1 for incomplete/failed readers, 2 for invalid configuration, or 130 for interruption.
+An operation already in progress may finish after the configured time budget; network calls retain their
+existing connection/read timeouts. Ctrl+C stops the batch without leaving background workers or a server.
+Per-reader state remains the authoritative record; the final summary is an outcome report for that invocation.
+
 ## How it works
 
 - The reader's project listing is scanned in the background. A project is a candidate if one of its sections is
@@ -67,6 +117,7 @@ Run the offline regression checks from the repo root:
 python -B -m unittest discover -s tests -v
 ```
 
-They use temporary files and local HTTP fixtures, with no third-party dependencies or external requests.
+They cover interactive and batch workflows using temporary files and local HTTP fixtures, with no third-party
+dependencies or external requests. Personal `*.local.json` batch files/reports are ignored by Git.
 For assistant-guided setup, smoke tests and downloads, see [AI/USAGE.md](AI/USAGE.md).
 [AI/STRATEGY.md](AI/STRATEGY.md) describes how the repo keeps context for AI-assisted work.
