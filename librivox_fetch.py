@@ -11,8 +11,8 @@ don't list readers per section are skipped. Everything is decided from LibriVox'
 
 One section per project is offered: the first one 5-15 minutes long (--range), or, if none is, the one closest to
 that range. Its file is the 128 kbps one, judged by name (`*_128kb.mp3`). A 64 kbps file is suboptimal: it's used
-only when a section has no 128 kbps name, or the 128 kbps file turns out to be missing (the player can't load it,
-or its download fails).
+only when a section has no 128 kbps name, or an attempt to play or download it fails. Such failures can be
+temporary; the page offers a way to retry 128 kbps.
 
 A candidate is prime if its section is in the length range and has a 128 kbps file; otherwise (only 64 kbps, or
 no section in range) it's a backup: shown in its own section below the prime ones, not counted toward the goal.
@@ -29,6 +29,7 @@ import argparse
 import html
 import json
 import re
+import socket
 import sys
 import threading
 import time
@@ -217,14 +218,22 @@ class State:
             self.checked, self.candidates = saved["checked"], saved["candidates"]
             self.target = max(self.target, saved.get("target", 0))
             self.want_downloads = saved.get("want_downloads", 0)  # the last "Download N"
-            for c in self.candidates:  # a download that was running when the server stopped starts over
+            self.queue = list(dict.fromkeys(saved.get("queue", [])))
+            for c in self.candidates:  # also recover requests from older state files without a queue
                 if c["download"] and c["download"]["status"] in ("queued", "downloading"):
-                    c["download"] = None
+                    if c["download"].get("individual", True):
+                        if c["url"] not in self.queue:
+                            self.queue.append(c["url"])
+                        c["download"] = {"status": "queued", "at": now()}
+                    else:
+                        c["download"] = None  # the saved bulk target selects it again, prime first
+            if self.reconcile_downloads():
+                self.save()
 
     def save(self):
         self.out.mkdir(parents=True, exist_ok=True)
         data = {"reader": self.args.name, "reader_id": self.rid, "updated_at": now(), "target": self.target,
-                "want_downloads": self.want_downloads,
+                "want_downloads": self.want_downloads, "queue": self.queue,
                 "checked": self.checked, "candidates": self.candidates}
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
@@ -244,9 +253,33 @@ class State:
         return sum(bool(c["download"]) and c["download"]["status"] == "done" and c["decision"] != "reject"
                    for c in self.candidates)
 
+    def reconcile_downloads(self):
+        """Keep completion honest without removing the saved path, timestamp or decisions. Lock held."""
+        changed = False
+        for c in self.candidates:
+            d = c["download"]
+            if d and d["status"] == "done" and not (self.out / d["file"]).is_file():
+                d.update(status="missing", error="Downloaded file is missing; download again to restore it.")
+                changed = True
+        return changed
+
+    def enqueue(self, c):
+        """An individual request stays in the saved queue until its transfer finishes. Lock held."""
+        self.reconcile_downloads()
+        d = c["download"]
+        if c["decision"] == "reject" or (d and d["status"] == "downloading"):
+            return
+        if d and d["status"] == "done" and d["quality"] == c["quality"]:
+            return
+        if c["url"] not in self.queue:
+            self.queue.append(c["url"])
+        c["download"] = {"status": "queued", "at": now()}
+
     def snapshot(self):
         """The page's view of the state, as JSON (serialized under the lock, since the threads mutate it)."""
         with self.lock:
+            if self.reconcile_downloads():
+                self.save()
             return json.dumps({"reader": self.args.name, "reader_url": self.args.url, "status": self.status, "page": self.page,
                     "checked": len(self.checked), "target": self.goal(), "good_prime": self.good_prime(),
                     "want_downloads": self.want_downloads, "downloaded": self.downloaded(),
@@ -256,8 +289,9 @@ class State:
                               ensure_ascii=False)
 
     def mark_128_missing(self, c, why):
-        """The 128 kbps file isn't there: fall back to the 64 kbps one (suboptimal)."""
-        c["quality"] = "64"
+        """Record a failed attempt, not proof the file is absent. Allow the user to retry."""
+        if c["section"]["url64"]:
+            c["quality"] = "64"
         c["missing_128"] = {"why": why, "at": now()}
 
 
@@ -307,13 +341,16 @@ def scanner(st):
 
 def next_download(st):
     """The next candidate to download, or None. Called with the lock held."""
+    st.reconcile_downloads()
     while st.queue:
-        c = st.find(st.queue.pop(0))
-        if c and not (c["download"] and c["download"]["status"] == "done"):
+        c = st.find(st.queue[0])
+        if c and c["decision"] != "reject" and not (c["download"] and c["download"]["status"] == "done"):
             return c
+        st.queue.pop(0)
     if st.downloaded() >= st.want_downloads:
         return None
-    pending = [c for c in st.candidates if c["decision"] != "reject" and not c["download"]]
+    pending = [c for c in st.candidates if c["decision"] != "reject" and
+               (not c["download"] or c["download"]["status"] == "missing")]
     for c in pending:
         if is_prime(c):
             return c
@@ -322,33 +359,49 @@ def next_download(st):
     return pending[0] if pending else None
 
 
+def download_next(st):
+    """Perform one transfer. Return False when idle; the worker waits between attempts."""
+    with st.lock:
+        c = next_download(st)
+        if not c:
+            return False
+        quality = c["quality"]  # playback controls may change the candidate during the transfer
+        individual = c["url"] in st.queue
+        c["download"] = {"status": "downloading", "individual": individual, "at": now()}
+        st.save()  # persist intent before starting network I/O, including bulk transfers
+    try:
+        url = c["section"]["url128"] if quality == "128" else c["section"]["url64"]
+        file = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
+        folder = st.out / project_slug(c["url"])
+        download(url, folder / file)
+        result = {"status": "done", "quality": quality, "file": str(Path(project_slug(c["url"])) / file),
+                  "at": now()}
+    except Exception as e:
+        result = {"status": "failed", "error": str(e), "at": now()}
+    with st.lock:
+        fallback = (result["status"] == "failed" and quality == "128" and
+                    c["section"]["url64"] and c["decision"] != "reject")
+        if result["status"] == "failed" and quality == "128":
+            st.mark_128_missing(c, result["error"])
+        if fallback:
+            # Individual requests retry immediately; bulk backups keep their existing selection order.
+            result = {"status": "queued", "at": now()} if individual else None
+        elif result["status"] == "done" and quality == "128":
+            c["quality"] = "128"
+            c.pop("missing_128", None)
+        if not fallback and c["url"] in st.queue:
+            st.queue.remove(c["url"])
+        c["download"] = result
+        st.save()
+    st.wake.set()
+    return True
+
+
 def downloader(st):
     while True:
-        with st.lock:
-            c = next_download(st)
-            if c:
-                c["download"] = {"status": "downloading"}
-        if not c:
+        if not download_next(st):
             st.wake.wait(2)
             st.wake.clear()
-            continue
-        sec = c["section"]
-        url = sec["url128"] if c["quality"] == "128" else sec["url64"]
-        file = urllib.parse.unquote(url.rsplit("/", 1)[-1])
-        folder = st.out / project_slug(c["url"])
-        try:
-            download(url, folder / file)
-            result = {"status": "done", "quality": c["quality"], "file": str(Path(project_slug(c["url"])) / file),
-                      "at": now()}
-        except Exception as e:
-            result = {"status": "failed", "error": str(e), "at": now()}
-        with st.lock:
-            if result["status"] == "failed" and c["quality"] == "128":
-                st.mark_128_missing(c, result["error"])
-                result = None  # eligible again, as a 64 kbps candidate
-            c["download"] = result
-            st.save()
-        st.wake.set()
 
 
 # ---------------------------------------------------------------- web page
@@ -439,7 +492,7 @@ async function post(path, body) {
 }
 function downloadN() { post("download_n", {n: parseInt($("n").value) || 0}); }
 
-// One handler for every card's buttons, and one for players failing to load (a missing 128 kbps file).
+// Player errors can be transient; fallback is reversible through Retry 128 kbps.
 for (const box of [$("list"), $("backup")]) {
   box.addEventListener("click", e => {
     const b = e.target.closest("button[data-act]");
@@ -449,6 +502,7 @@ for (const box of [$("list"), $("backup")]) {
     if (b.dataset.act === "reject") post("decide", {url, decision: "reject"});
     if (b.dataset.act === "undo") post("decide", {url, decision: null});
     if (b.dataset.act === "download") post("download", {url});
+    if (b.dataset.act === "retry_128") post("retry_128", {url});
   });
   box.addEventListener("error", e => {
     if (e.target.tagName === "AUDIO" && e.target.dataset.q === "128")
@@ -461,7 +515,7 @@ function parts(c) {
   const sec = c.section, d = c.download, rejected = c.decision === "reject", kept = c.decision === "keep";
   const tags = [`<span class="tag">${esc(c.type)}</span>`,
     kept ? `<span class="tag ok">kept</span>` : "",
-    c.quality === "128" ? `<span class="tag ok">128 kbps</span>` : `<span class="tag warn">64 kbps only</span>`,
+    c.quality === "128" ? `<span class="tag ok">128 kbps</span>` : `<span class="tag warn">64 kbps</span>`,
     c.in_range ? "" : `<span class="tag warn">outside length range</span>`,
     d ? `<span class="tag ${d.status === "done" ? "ok" : d.status === "failed" ? "bad" : ""}">${esc(d.status)}</span>` : ""
   ].join("");
@@ -469,11 +523,14 @@ function parts(c) {
     info: `<div class="title"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>${tags}</div>
       <div class="muted">${esc(sec.title)} · ${mins(sec.seconds)} ·
         ${c.solo_sections} of ${c.sections_total} sections solo
-        ${d && d.error ? " · " + esc(d.error) : ""}${c.missing_128 ? " · 128 kbps missing: " + esc(c.missing_128.why) : ""}</div>`,
+        ${d && d.error ? " · " + esc(d.error) : ""}${c.missing_128 ? " · 128 kbps attempt failed: " + esc(c.missing_128.why) : ""}</div>`,
     // toggles: the selected one is coloured, and clicking it again clears the decision
     decide: `<button class="keep${kept ? " on" : ""}" aria-pressed="${kept}" data-act="${kept ? "undo" : "keep"}">Keep</button>` +
       `<button class="reject${rejected ? " on" : ""}" aria-pressed="${rejected}" data-act="${rejected ? "undo" : "reject"}">Reject</button>`,
-    dl: !rejected && !(d && d.status === "done") ? `<button data-act="download">Download</button>` : "",
+    dl: ((!rejected && !(d && (["queued", "downloading"].includes(d.status) ||
+          (d.status === "done" && d.quality === c.quality)))) ? `<button data-act="download">Download</button>` : "") +
+      (c.missing_128 && sec.url128 && !(d && ["queued", "downloading"].includes(d.status)) ?
+        `<button data-act="retry_128">Retry 128 kbps</button>` : ""),
   };
 }
 
@@ -566,17 +623,25 @@ def make_handler(st):
                         self.send(400, "bad decision", "text/plain")
                         return
                     c["decision"], c["decided_at"] = body.get("decision"), now()
+                    if c["decision"] == "reject" and c["url"] in st.queue:
+                        st.queue.remove(c["url"])
+                        if c["download"] and c["download"]["status"] == "queued":
+                            c["download"] = None
                 elif self.path == "/api/download" and c:
-                    if c["download"] and c["download"]["status"] == "failed":
-                        c["download"] = None
-                    st.queue.append(c["url"])
-                    c["download"] = c["download"] or {"status": "queued", "at": now()}
+                    st.enqueue(c)
                 elif self.path == "/api/download_n":
                     st.want_downloads = max(0, int(body.get("n", 0)))
                 elif self.path == "/api/scan_more":
                     st.target += max(0, int(body.get("n", 0)))
-                elif self.path == "/api/missing_128" and c and c["quality"] == "128":
-                    st.mark_128_missing(c, "player couldn't load it")
+                elif self.path == "/api/missing_128" and c:
+                    if c["quality"] == "128":
+                        st.mark_128_missing(c, "player couldn't load it (possibly a temporary connection error)")
+                elif self.path == "/api/retry_128" and c and c["section"]["url128"]:
+                    if c["download"] and c["download"]["status"] in ("queued", "downloading"):
+                        self.send(409, "wait for the current download to finish", "text/plain")
+                        return
+                    c["quality"] = "128"
+                    c.pop("missing_128", None)
                 else:
                     self.send(404, "not found", "text/plain")
                     return
@@ -585,6 +650,17 @@ def make_handler(st):
             self.send(200, "{}", "application/json")
 
     return Handler
+
+
+class LocalServer(ThreadingHTTPServer):
+    """Fail on an occupied port, including on Windows, before starting any background work."""
+
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def main():
@@ -604,14 +680,16 @@ def main():
 
     rid = reader_id(args.url)
     st = State(args, rid, Path(args.out or Path(__file__).parent / "downloads" / slug(args.name)))
+    server = LocalServer(("127.0.0.1", args.port), make_handler(st))
     threading.Thread(target=scanner, args=(st,), daemon=True).start()
     threading.Thread(target=downloader, args=(st,), daemon=True).start()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(st))
     print(f"{args.name} (reader {rid}): open http://127.0.0.1:{args.port}/  (Ctrl+C to stop)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":

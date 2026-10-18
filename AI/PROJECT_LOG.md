@@ -1,6 +1,11 @@
 # librivox-download: project log
 
-## Goal
+The initial design and validation notes below record the 2026-10-11/12 state. Their status and next-step
+statements are historical. See [PLAN.md](PLAN.md) for the current state; later changes are appended by date.
+
+## 2026-10-11/12: initial project record
+
+### Goal
 
 Gather voice samples of one LibriVox reader for voice work, such as training a TTS voice. Given a reader's name
 and LibriVox page, find recordings where that reader is the only voice,
@@ -10,7 +15,7 @@ let the user vet them by ear, and download the ones kept, as 128 kbps MP3s.
 mean different recording sessions, mics and years, which is the variety voice work needs. It also suits
 keeping training and held-out audio apart by book.
 
-## Design decisions
+### Design decisions
 
 - **LibriVox is the only thing scanned.** All decisions come from LibriVox's pages. archive.org (where LibriVox
   hosts the audio) is contacted only to stream or download the chosen file, never to look up metadata.
@@ -45,7 +50,7 @@ keeping training and held-out audio apart by book.
   self-describing folders are needed (e.g. exporting to another project), generate them from `state.json` then.
 - **Standard library only**, so it runs anywhere with Python 3.12.
 
-## How LibriVox pages work (as of 2026-10)
+### How LibriVox pages work (as of 2026-10)
 
 - **Reader page** (`/reader/<id>/`): the project list is loaded by AJAX from
   `/reader/get_results?primary_key=<id>&search_category=reader&search_page=<n>&search_order=alpha&project_type=either`.
@@ -59,9 +64,9 @@ keeping training and held-out audio apart by book.
 - Some pages have no per-section readers (empty reader cells), and at least one returned HTTP 401
   (The Count of Monte Cristo, version 4 dramatic reading).
 
-## Log
+### Development history
 
-### 2026-10-11/12: first version
+#### 2026-10-11/12: first version
 
 - **Script, then a page.** Started as a command-line script that found and downloaded whole solo projects. Reworked
   in steps after feedback:
@@ -98,7 +103,7 @@ keeping training and held-out audio apart by book.
   local paths, sibling projects or this machine's run state; those moved to `AI/LOCAL.md`, which is git-ignored.
   Reader-specific figures were dropped (see `AI/MEMORY.md`).
 
-## Code map (librivox_fetch.py)
+### Code map (librivox_fetch.py)
 
 - **LibriVox pages:** `listing_pages` (the AJAX listing, a page at a time), `read_project` (a project's section
   table), `file_urls` (128/64 kbps URLs by name), `pick_section`, `check` (candidate or skip reason), `is_prime`.
@@ -110,19 +115,19 @@ keeping training and held-out audio apart by book.
   button right of it, each replaced only when it changes), `make_handler` (GET `/`, `/api/state`; POST `decide`
   (keep / reject / null), `download`, `download_n`, `scan_more`, `missing_128`).
 
-## Status
+### Status at the time
 
 Scanning against the live site works: it pauses at the goal, and a restart resumes from `state.json`. The page's
 later changes (Keep / Reject toggles, prime / backup split, done state, saved N) were checked offline, from a saved
 `state.json` with scanning and downloading turned off. Not yet tried against the live site: Keep / Reject in a real
 session, and downloads.
 
-## Open questions
+### Open questions at the time
 
 - **Where the samples go.** Nothing decides where downloads should end up in the project that uses them, or
   whether they're training or held-out audio there. That's the user's call.
 
-## Known issues
+### Known issues at the time
 
 - **Any player error downgrades to 64 kbps.** The page reports "128 kbps missing" when the player fails for any
   reason, including a dropped connection, and the candidate becomes a backup. The page has no way to undo it (edit
@@ -130,6 +135,35 @@ session, and downloads.
 - **HTML parsing by regular expressions.** `listing_pages` and `read_project` depend on LibriVox's current markup
   (described above). If LibriVox changes its pages, look there first.
 
-## Next steps
+### Next steps at the time
 
 - Run the current version against a reader: check Keep / Reject and a download.
+
+## 2026-10-18: download recovery and documentation maintenance
+
+The status review found that completion trusted saved flags even when files were absent, individual requests
+were lost on restart, and a failed individual 128 kbps request did not continue at 64 without another click.
+The user authorized fixing these and bringing the docs into conformance with their updated strategy.
+
+- Persist the individual queue and save in-flight intent before network I/O. Recover queued and interrupted
+  transfers, including older state without a queue. Deduplicate repeated clicks. Individual fallback keeps its
+  request through a restart; bulk fallback preserves prime priority and waits for scanning to finish.
+- Reconcile completion with files on disk at startup and during UI/download selection. Mark missing files
+  explicitly, preserving the old path/time and listening decision, and make them eligible for restoration.
+- Make 128 kbps fallback reversible. Explain that a playback failure can be temporary, offer Retry 128 kbps,
+  and retain existing 64 kbps recordings. Capture the actual transfer quality so a simultaneous player error
+  cannot mislabel the saved file. Reject cancels queued work; already running transfers may finish and stay on disk.
+- Fix the previously observed Windows duplicate-port behavior with exclusive binding, before any worker starts.
+- Keep the standard-library single-script design and all existing selection rules. In particular, Keep remains
+  an annotation; bulk downloading takes non-rejected candidates. No datasets or existing recordings were migrated.
+- Follow the supplied strategy: MEMORY routes reading, PLAN holds the present, USAGE describes operational tasks
+  and their prerequisites in plain language, entry files only point to MEMORY, and local setup stays ignored.
+  The earlier mixed project notes above are retained as a dated historical record rather than current guidance.
+
+Validation on Python 3.12.10: 15 offline tests pass, covering restart/fallback/missing-file recovery, durable
+intent, decisions and selection semantics, transfer bytes through local HTTP, and occupied-port rejection.
+CLI help passes. A fresh normal live run paused at the default candidate goal; browser Keep/Reject/clear and
+one actual 128 kbps download passed, and the completed file/state survived a server restart. A local-only UI
+fixture confirmed Retry 128 kbps restores the player selection and moves the card back to the prime list.
+Existing user output was not used as a test fixture. This did not assess subjective playback/audio quality,
+perform a full catalog survey, or exercise every remote failure mode. Normal use remains the next check.
