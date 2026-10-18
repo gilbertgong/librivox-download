@@ -19,20 +19,22 @@ Then open http://127.0.0.1:8765/. Stop the server with Ctrl+C; running it again 
   read by this reader alone and is at least a minute long. Dramatic readings, other languages, and projects that
   don't list readers per section are skipped.
 - Each candidate offers one section: the first 5–15 minutes long, or the closest to that range.
-- Files are 128 kbps. Candidates with only 64 kbps (no 128 kbps file, or it failed to play or download) are kept
-  as backups, in their own section, and don't count toward the target.
-- Scanning stops at 20 candidates with 128 kbps that you haven't rejected. Rejecting one makes it look further;
+- A candidate is **prime** if that section is in the range and has a 128 kbps file. The rest are **backups**: no
+  section in the range, or only 64 kbps (no 128 kbps file, or it failed to play or download). Backups are listed
+  below the prime candidates and don't count toward the target.
+- Scanning stops at 20 prime candidates that you haven't rejected. Rejecting one makes it look further;
   "Scan 10 more" raises the target.
-- The page shows progress, a card per candidate (player, section, length, Keep, Reject, Download), the backups,
+- The page shows progress (including how many you've kept and rejected), a card per candidate (section, length, and Keep / Reject left of the player, Download right of it), the backups,
   and the skipped projects with reasons. Keep marks a sample you've listened to and approved.
-- "Download N" (default 10) has the server download the first N candidates you haven't rejected, 128 kbps first;
-  backups only if the reader's listing runs out of 128 kbps candidates.
+- "Download N" (default 10) has the server download the first N candidates you haven't rejected, prime first;
+  backups only if the reader's listing runs out of prime candidates. When all N are done, the page turns pale
+  blue and says so.
 
 ## Options
 
 | Option | Default | |
 |---|---|---|
-| `--projects` | 20 | candidates to find |
+| `--projects` | 20 | prime candidates to find |
 | `--count` | 10 | the page's default N for "Download N" |
 | `--range MIN MAX` | 5 15 | preferred section length, minutes |
 | `--min-seconds` | 60 | never offer a shorter section |

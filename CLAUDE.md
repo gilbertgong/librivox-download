@@ -1,2 +1,3 @@
 @AI/MEMORY.md
 @AI/PROJECT_LOG.md
+@AI/LOCAL.md

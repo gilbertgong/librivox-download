@@ -1,0 +1,3 @@
+# Normalize detected text files and use LF in working copies on every platform.
+# Binary files are left unchanged.
+* text=auto eol=lf

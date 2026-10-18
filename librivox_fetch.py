@@ -14,11 +14,12 @@ that range. Its file is the 128 kbps one, judged by name (`*_128kb.mp3`). A 64 k
 only when a section has no 128 kbps name, or the 128 kbps file turns out to be missing (the player can't load it,
 or its download fails).
 
-Scanning continues until there are --projects candidates with a 128 kbps file that haven't been rejected (or N,
-if "Download N" asks for more), so rejecting one makes the scan look further. Candidates with only 64 kbps are
-tracked as backups: shown in their own section, not counted toward that goal. On the page you can listen, reject,
-download one, or "download N": the server downloads, in the background, the first N candidates not rejected,
-128 kbps first; a backup is taken only once the listing is exhausted and no 128 kbps candidate is left.
+A candidate is prime if its section is in the length range and has a 128 kbps file; otherwise (only 64 kbps, or
+no section in range) it's a backup: shown in its own section below the prime ones, not counted toward the goal.
+Scanning continues until there are --projects prime candidates that haven't been rejected (or N, if "Download N"
+asks for more), so rejecting one makes the scan look further. On the page you can listen, keep, reject, download
+one, or "download N": the server downloads, in the background, the first N candidates not rejected, prime first;
+a backup is taken only once the listing is exhausted and no prime candidate is left.
 
 Everything lives in <out> (default downloads/<name>): one folder per downloaded project with its MP3, and
 state.json, the single record of what's been checked, decided (keep / reject) and downloaded, with the time of each
@@ -190,6 +191,11 @@ def slug(text):
 
 # ---------------------------------------------------------------- shared state
 
+def is_prime(c):
+    """A candidate that counts toward the goal: a section in the length range, with a 128 kbps file."""
+    return c["quality"] == "128" and c["in_range"]
+
+
 class State:
     """Everything the page shows, guarded by one lock and saved to state.json on each change."""
 
@@ -210,6 +216,7 @@ class State:
             saved = json.loads(self.path.read_text(encoding="utf-8"))
             self.checked, self.candidates = saved["checked"], saved["candidates"]
             self.target = max(self.target, saved.get("target", 0))
+            self.want_downloads = saved.get("want_downloads", 0)  # the last "Download N"
             for c in self.candidates:  # a download that was running when the server stopped starts over
                 if c["download"] and c["download"]["status"] in ("queued", "downloading"):
                     c["download"] = None
@@ -217,6 +224,7 @@ class State:
     def save(self):
         self.out.mkdir(parents=True, exist_ok=True)
         data = {"reader": self.args.name, "reader_id": self.rid, "updated_at": now(), "target": self.target,
+                "want_downloads": self.want_downloads,
                 "checked": self.checked, "candidates": self.candidates}
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
@@ -226,11 +234,11 @@ class State:
         return next((c for c in self.candidates if c["url"] == url), None)
 
     def goal(self):
-        """128 kbps candidates the scan aims for: the target, or more if "Download N" asks for more."""
+        """Prime candidates the scan aims for: the target, or more if "Download N" asks for more."""
         return max(self.target, self.want_downloads)
 
-    def good_128(self):
-        return sum(c["quality"] == "128" and c["decision"] != "reject" for c in self.candidates)
+    def good_prime(self):
+        return sum(is_prime(c) and c["decision"] != "reject" for c in self.candidates)
 
     def downloaded(self):
         return sum(bool(c["download"]) and c["download"]["status"] == "done" and c["decision"] != "reject"
@@ -240,10 +248,10 @@ class State:
         """The page's view of the state, as JSON (serialized under the lock, since the threads mutate it)."""
         with self.lock:
             return json.dumps({"reader": self.args.name, "reader_url": self.args.url, "status": self.status, "page": self.page,
-                    "checked": len(self.checked), "target": self.goal(), "good_128": self.good_128(),
+                    "checked": len(self.checked), "target": self.goal(), "good_prime": self.good_prime(),
                     "want_downloads": self.want_downloads, "downloaded": self.downloaded(),
-                    "default_n": self.args.count, "out": str(self.out.resolve()),
-                    "candidates": self.candidates,
+                    "default_n": self.args.count, "range": self.args.range, "out": str(self.out.resolve()),
+                    "candidates": [{**c, "prime": is_prime(c)} for c in self.candidates],
                     "skips": [{"url": u, **v} for u, v in self.checked.items() if v["reason"]]},
                               ensure_ascii=False)
 
@@ -254,7 +262,7 @@ class State:
 
 
 def scanner(st):
-    """Read the listing and check projects while there are fewer than `target` usable 128 kbps candidates."""
+    """Read the listing and check projects while there are fewer than `target` prime candidates."""
     args = st.args
     try:
         for page, projects in listing_pages(st.rid, args.order):
@@ -263,7 +271,7 @@ def scanner(st):
             for p in projects:
                 while True:  # wait while there are enough; a reject or "scan more" wakes this up
                     with st.lock:
-                        enough = st.good_128() >= st.goal()
+                        enough = st.good_prime() >= st.goal()
                         st.status = "paused: enough candidates" if enough else "scanning"
                     if not enough:
                         break
@@ -307,10 +315,10 @@ def next_download(st):
         return None
     pending = [c for c in st.candidates if c["decision"] != "reject" and not c["download"]]
     for c in pending:
-        if c["quality"] == "128":
+        if is_prime(c):
             return c
     if not st.scan_done:
-        return None  # more 128 kbps candidates may still turn up; 64 kbps only once the listing is exhausted
+        return None  # more prime candidates may still turn up; backups only once the listing is exhausted
     return pending[0] if pending else None
 
 
@@ -349,13 +357,17 @@ PAGE = r"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LibriVox picker</title>
 <style>
-:root { --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --line:#e2e1dc; --card:#fff; --accent:#2f6fdb;
+:root { --bg:#fafaf8; --done-bg:#eaf3fd; --fg:#1d1d1b; --muted:#6b6b66; --line:#e2e1dc; --card:#fff; --accent:#2f6fdb;
         --bad:#b3261e; --ok:#1e7a3c; --warn:#9a6700; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#161615; --fg:#ecebe6; --muted:#9a9993; --line:#33332f; --card:#1f1f1d; --accent:#7aa7ff;
+  :root { --bg:#161615; --done-bg:#14202e; --fg:#ecebe6; --muted:#9a9993; --line:#33332f; --card:#1f1f1d; --accent:#7aa7ff;
           --bad:#ff8a80; --ok:#6fd08c; --warn:#e3b341; } }
 * { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; transition:background .6s; }
+body.done { background:var(--done-bg); }
+#complete { margin:0 0 18px; padding:14px 16px; border:1px solid var(--accent); border-radius:10px;
+            background:var(--card); font-size:17px; font-weight:600; }
+#complete .muted { display:block; font-size:14px; font-weight:400; margin-top:2px; }
 main { max-width:1100px; margin:0 auto; padding:20px 16px 60px; }
 h1 { font-size:22px; margin:0 0 4px; }
 a { color:var(--accent); }
@@ -367,9 +379,11 @@ button { font:inherit; padding:5px 11px; border-radius:7px; border:1px solid var
          color:var(--fg); cursor:pointer; }
 button:hover { border-color:var(--muted); }
 button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+button.keep.on { background:var(--ok); border-color:var(--ok); color:var(--bg); }
+button.reject.on { background:var(--bad); border-color:var(--bad); color:var(--bg); }
 input[type=number] { width:64px; font:inherit; padding:4px 6px; border-radius:7px; border:1px solid var(--line);
                      background:var(--card); color:var(--fg); }
-.card { display:grid; grid-template-columns:1fr auto; gap:6px 16px; padding:12px 14px; margin-bottom:10px;
+.card { padding:12px 14px; margin-bottom:10px;
         background:var(--card); border:1px solid var(--line); border-radius:10px; }
 .card.rejected { opacity:.45; }
 .card.kept { border-color:var(--ok); }
@@ -379,30 +393,34 @@ input[type=number] { width:64px; font:inherit; padding:4px 6px; border-radius:7p
 .tag.warn { color:var(--warn); border-color:var(--warn); }
 .tag.ok { color:var(--ok); border-color:var(--ok); }
 .tag.bad { color:var(--bad); border-color:var(--bad); }
-.actions { display:flex; gap:6px; align-items:start; flex-wrap:wrap; justify-content:end; }
-audio { width:100%; height:34px; grid-column:1 / -1; }
+.row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+.row audio { flex:1; min-width:0; height:34px; }
+.decide, .dl { display:flex; gap:6px; flex-shrink:0; }
 h2 { font-size:17px; margin:28px 0 4px; }
 details { margin-top:24px; }
 details li { margin:2px 0; }
-@media (max-width:640px) { .card { grid-template-columns:1fr; } .actions { justify-content:start; } }
+@media (max-width:640px) { .row { flex-wrap:wrap; } .row audio { order:-1; flex-basis:100%; } .dl { margin-left:auto; } }
 </style></head>
 <body><main>
 <h1 id="h"></h1>
 <div class="muted" id="sub"></div>
 <div class="bar">
   <span id="scan"></span>
-  <span>Candidates (128 kbps, not rejected): <b id="good"></b> / <b id="target"></b> · backups: <b id="backups"></b></span>
+  <span>Prime candidates (not rejected): <b id="good"></b> / <b id="target"></b> · backups: <b id="backups"></b></span>
+  <span>Kept: <b id="kept"></b> · rejected: <b id="rejected"></b></span>
   <button onclick="post('scan_more', {n: 10})">Scan 10 more</button>
   <span style="flex:1"></span>
   <span>Downloaded: <b id="done"></b></span>
   <input type="number" id="n" min="1"> <button class="primary" onclick="downloadN()">Download N</button>
 </div>
-<p class="muted" id="empty">No candidates yet.</p>
+<div id="complete" hidden></div>
+<p class="muted" id="prime-note"></p>
+<p class="muted" id="empty">No prime candidates yet.</p>
 <div id="list"></div>
 <div id="backup-wrap" hidden>
-  <h2>Backups: 64 kbps only</h2>
-  <p class="muted">Not counted toward the goal. Downloaded by "Download N" only once the listing is exhausted and no
-    128 kbps candidate is left.</p>
+  <h2>Backups</h2>
+  <p class="muted">Only 64 kbps, or no section in the length range. Not counted toward the goal. Downloaded by
+    "Download N" only once the listing is exhausted and no prime candidate is left.</p>
   <div id="backup"></div>
 </div>
 <details><summary class="muted" id="skipsum"></summary><ul id="skips"></ul></details>
@@ -411,7 +429,7 @@ details li { margin:2px 0; }
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const mins = s => s == null ? "?" : (s / 60).toFixed(1) + " min";
-const cards = new Map();  // project URL -> {el, html, src}; each card is built once so its player keeps playing
+const cards = new Map();  // project URL -> {el, html, src, box}; each card is built once so its player keeps playing
 let first = true;
 
 async function post(path, body) {
@@ -438,7 +456,8 @@ for (const box of [$("list"), $("backup")]) {
   }, true);
 }
 
-function info(c) {
+// A card's text, its keep / reject buttons (left of the player) and its download button (right of it).
+function parts(c) {
   const sec = c.section, d = c.download, rejected = c.decision === "reject", kept = c.decision === "keep";
   const tags = [`<span class="tag">${esc(c.type)}</span>`,
     kept ? `<span class="tag ok">kept</span>` : "",
@@ -446,37 +465,40 @@ function info(c) {
     c.in_range ? "" : `<span class="tag warn">outside length range</span>`,
     d ? `<span class="tag ${d.status === "done" ? "ok" : d.status === "failed" ? "bad" : ""}">${esc(d.status)}</span>` : ""
   ].join("");
-  return `<div><div class="title"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>${tags}</div>
+  return {
+    info: `<div class="title"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>${tags}</div>
       <div class="muted">${esc(sec.title)} · ${mins(sec.seconds)} ·
         ${c.solo_sections} of ${c.sections_total} sections solo
-        ${d && d.error ? " · " + esc(d.error) : ""}${c.missing_128 ? " · 128 kbps missing: " + esc(c.missing_128.why) : ""}</div></div>
-    <div class="actions">
-      ${kept ? `<button data-act="undo">Undo keep</button>`
-        : rejected ? `<button data-act="undo">Undo reject</button>`
-        : `<button data-act="keep">Keep</button><button data-act="reject">Reject</button>`}
-      ${!rejected && !(d && d.status === "done") ? `<button data-act="download">Download</button>` : ""}
-    </div>`;
+        ${d && d.error ? " · " + esc(d.error) : ""}${c.missing_128 ? " · 128 kbps missing: " + esc(c.missing_128.why) : ""}</div>`,
+    // toggles: the selected one is coloured, and clicking it again clears the decision
+    decide: `<button class="keep${kept ? " on" : ""}" aria-pressed="${kept}" data-act="${kept ? "undo" : "keep"}">Keep</button>` +
+      `<button class="reject${rejected ? " on" : ""}" aria-pressed="${rejected}" data-act="${rejected ? "undo" : "reject"}">Reject</button>`,
+    dl: !rejected && !(d && d.status === "done") ? `<button data-act="download">Download</button>` : "",
+  };
 }
 
 function render(candidates) {
-  $("empty").hidden = candidates.some(c => c.quality === "128");
-  $("backup-wrap").hidden = !candidates.some(c => c.quality === "64");
+  $("empty").hidden = candidates.some(c => c.prime);
+  $("backup-wrap").hidden = candidates.every(c => c.prime);
   for (const c of candidates) {  // candidates are only ever appended, so order is stable
     let k = cards.get(c.url);
     if (!k) {
       const el = document.createElement("div");
       el.className = "card"; el.dataset.url = c.url;
-      el.innerHTML = `<div class="info" style="display:contents"></div><audio controls preload="none"></audio>`;
-      k = {el, html: null, src: null};
+      el.innerHTML = `<div class="info"></div>
+        <div class="row"><div class="decide"></div><audio controls preload="none"></audio><div class="dl"></div></div>`;
+      k = {el, html: {}, src: null, box: null};
       cards.set(c.url, k);
     }
-    const html = info(c), src = c.quality === "128" ? c.section.url128 : c.section.url64;
-    if (html !== k.html) { k.el.querySelector(".info").innerHTML = html; k.html = html; }
-    if (src !== k.src) {  // new, or downgraded to 64 kbps: (re)place it in the right section
+    const html = parts(c), src = c.quality === "128" ? c.section.url128 : c.section.url64;
+    for (const [part, h] of Object.entries(html))  // only touch what changed, never the player
+      if (h !== k.html[part]) { k.el.querySelector("." + part).innerHTML = h; k.html[part] = h; }
+    if (src !== k.src) {  // new, or downgraded to 64 kbps
       const a = k.el.querySelector("audio");
       a.dataset.q = c.quality; a.src = src; k.src = src;
-      $(c.quality === "128" ? "list" : "backup").appendChild(k.el);
     }
+    const box = c.prime ? "list" : "backup";
+    if (box !== k.box) { $(box).appendChild(k.el); k.box = box; }  // new, or demoted to a backup
     k.el.classList.toggle("rejected", c.decision === "reject");
     k.el.classList.toggle("kept", c.decision === "keep");
   }
@@ -488,13 +510,21 @@ async function refresh() {
     $("h").textContent = s.reader;
     $("sub").innerHTML = `<a href="${esc(s.reader_url)}" target="_blank" rel="noopener">${esc(s.reader_url)}</a>` +
       ` · saving to ${esc(s.out)}`;
-    $("n").value = s.default_n;
+    $("n").value = s.want_downloads || s.default_n;
+    $("prime-note").textContent = `Prime: a section ${s.range[0]}–${s.range[1]} min long, at 128 kbps.`;
     first = false;
   }
   $("scan").innerHTML = `${esc(s.status)} · listing page <b>${s.page}</b> · <b>${s.checked}</b> projects checked`;
-  $("good").textContent = s.good_128; $("target").textContent = s.target;
-  $("backups").textContent = s.candidates.filter(c => c.quality === "64" && c.decision !== "reject").length;
+  $("good").textContent = s.good_prime; $("target").textContent = s.target;
+  $("backups").textContent = s.candidates.filter(c => !c.prime && c.decision !== "reject").length;
+  $("kept").textContent = s.candidates.filter(c => c.decision === "keep").length;
+  $("rejected").textContent = s.candidates.filter(c => c.decision === "reject").length;
   $("done").textContent = s.downloaded + (s.want_downloads ? " of " + s.want_downloads : "");
+  const complete = s.want_downloads > 0 && s.downloaded >= s.want_downloads;  // "Download N" has finished
+  document.body.classList.toggle("done", complete);
+  $("complete").hidden = !complete;
+  if (complete) $("complete").innerHTML = `🎉 All ${s.want_downloads} downloads completed` +
+    `<span class="muted">Saved to ${esc(s.out)}</span>`;
   render(s.candidates);
   $("skipsum").textContent = `Skipped projects (${s.skips.length})`;
   $("skips").innerHTML = s.skips.map(k =>

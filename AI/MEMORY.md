@@ -1,13 +1,15 @@
 # Working notes for AI assistants
 
 How the user prefers an AI assistant to work in this repo. Any assistant (whatever the tool or model) should read
-this file and `AI/PROJECT_LOG.md` before starting, and follow them.
+this file and `AI/PROJECT_LOG.md` before starting, and `AI/LOCAL.md` if it exists, and follow them.
 
 ## How this repo is organized for AI
 
 - `AI/` is the single home for everything an assistant needs: `MEMORY.md` (how to work: these notes),
   `PROJECT_LOG.md` (the project: goals, decisions and their reasons, how things work, history, status, open
   questions, known issues), and `STRATEGY.md` (how this structure works, and how to set it up in another repo).
+- `AI/LOCAL.md` (optional, git-ignored) holds what's true only on one computer: local paths, related projects next
+  to the repo, local run state, machine-only rules.
 - Entry files (`AGENTS.md`, `CLAUDE.md`, and any other assistant's equivalent) only point to the files in `AI/`.
   They hold no content of their own, so nothing depends on which assistant is used.
 - `README.md` is for people: what the project is, how to run it, options, output, and information derived for
@@ -18,10 +20,19 @@ repo's own files carry over, and they should work for any assistant.
 
 ## Remember things in the repo, not in the assistant's own memory
 
-Save lasting preferences in this file and project facts in `AI/PROJECT_LOG.md`. Don't use an assistant's built-in or
-per-machine memory for this project.
+Save lasting preferences in this file, project facts in `AI/PROJECT_LOG.md`, and anything about this computer in
+`AI/LOCAL.md`. Don't use an assistant's built-in or per-machine memory for this project.
 
 *Why:* built-in memory stays on one computer or account, and other assistants can't see it.
+
+## Keep the shared docs self-contained
+
+`README.md`, `AI/MEMORY.md`, `AI/PROJECT_LOG.md` and `AI/STRATEGY.md` describe only the repo: no local paths,
+machine details, or files, folders and projects outside it. Describe outside needs generically ("the project that
+uses the samples"); where they are on this computer goes in `AI/LOCAL.md`.
+
+*Why:* the shared docs travel with the repo to other computers, other people and possibly the public. Local details
+are wrong elsewhere and can expose private information.
 
 ## Keep the docs current without asking
 
