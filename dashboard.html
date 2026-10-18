@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LibriVox collection</title>
+<style>
+:root{color-scheme:light dark;--bg:#f6f7fa;--card:#fff;--text:#202c3c;--muted:#647086;--line:#dce2eb;--blue:#285aca;--green:#216b4e;--red:#a02d3a;--soft:#eef3ff}
+@media(prefers-color-scheme:dark){:root{--bg:#131a25;--card:#1c2635;--text:#ecf0f7;--muted:#acb8cc;--line:#354359;--blue:#9dbbff;--green:#90d8b7;--red:#ffa4af;--soft:#263955}}
+[hidden]{display:none!important}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--line)}.header,main{max-width:1140px;margin:auto;padding:20px 24px}.header{display:flex;align-items:center;gap:30px;flex-wrap:wrap}.brand{font-weight:700;font-size:19px}nav{display:flex;gap:8px}nav a{padding:7px 14px;border-radius:7px;text-decoration:none}nav a.active{background:var(--soft);font-weight:650}a{color:var(--blue)}h1{font-size:28px;margin:12px 0 4px}h2{font-size:21px;margin:28px 0 10px}p{margin:6px 0 18px}.muted{color:var(--muted)}.mode{margin-left:auto;font-size:13px}.panel,.record{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.toolbar .spacer{flex:1}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:24px 0}.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}.stat strong{display:block;font-size:29px;font-variant-numeric:tabular-nums}.stat span{color:var(--muted);font-size:13px}button,select,input{font:inherit;border:1px solid var(--line);border-radius:7px;padding:7px 11px;background:var(--card);color:var(--text)}button{cursor:pointer}button:hover{border-color:var(--blue)}button:disabled{opacity:.5;cursor:default}button.primary{background:var(--blue);color:var(--card);border-color:var(--blue)}button.on{border-color:var(--blue);background:var(--soft)}button.bad.on{color:var(--red);border-color:var(--red)}input[type=number]{width:80px}label{display:flex;gap:6px;align-items:center}.filters label{display:grid;font-size:13px;color:var(--muted)}select{min-width:150px;color:var(--text)}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse}th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}td,th{padding:14px 10px;border-bottom:1px solid var(--line)}td small{display:block;max-width:350px;color:var(--muted)}.tag{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:2px 8px;font-size:12px;margin-left:6px;color:var(--muted)}.tag.bad{color:var(--red);border-color:var(--red)}.tag.ok{color:var(--green);border-color:var(--green)}.record.rejected{border-left:4px solid var(--red)}.record.kept{border-left:4px solid var(--green)}.title{font-weight:650;margin-bottom:4px}.audio-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}.audio-row audio{flex:1;min-width:220px;height:36px}.actions{display:flex;gap:7px;flex-wrap:wrap}.record[hidden],section[hidden],div[hidden],p[hidden],button[hidden]{display:none}details{margin-top:12px}summary{cursor:pointer;color:var(--muted)}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:420px;overflow:auto}li{margin-bottom:7px}.error{padding:12px 16px;background:var(--card);border:1px solid var(--red);border-radius:8px;color:var(--red)}.empty{padding:30px;text-align:center;color:var(--muted)}.path{overflow-wrap:anywhere;font-size:12px}.progress{height:5px;width:100%;accent-color:var(--blue);margin-top:14px}
+@media(max-width:700px){.header,main{padding:16px}.header{gap:12px}.mode{width:100%;margin:0}.stats{gap:8px}.stat{padding:12px}.stat strong{font-size:24px}.filters{align-items:stretch}.filters label{flex:1}.filters select{width:100%;min-width:130px}.audio-row audio{flex-basis:100%;order:-1}h1{font-size:25px}.panel{padding:12px}td,th{padding:10px 7px}}
+</style>
+<header><div class="header"><div class="brand">LibriVox collection</div><nav aria-label="Main navigation"><a href="/" id="overview-link">Overview</a><a href="/review" id="review-link">Review</a></nav><span class="mode muted" id="mode"></span></div></header>
+<main>
+<p id="error" class="error" role="alert" hidden></p>
+<section id="overview">
+  <h1>Your collection</h1><p class="muted" id="intro">Reader progress and saved recordings.</p>
+  <div class="stats"><div class="stat"><strong id="total-readers">0</strong><span>Readers</span></div><div class="stat"><strong id="total-downloaded">0</strong><span>Downloaded files</span></div><div class="stat"><strong id="total-usable">0</strong><span>Available, not marked bad</span></div></div>
+  <div class="panel"><div class="toolbar"><strong id="collection-status">Loading…</strong><span class="spacer"></span><label id="count-label" hidden>Total per reader <input id="count" type="number" min="1" value="10"></label><button class="primary" id="collect" hidden>Collect / resume</button><button id="pause" hidden>Pause collection</button><button id="scan-more" hidden>Scan 10 more</button><a href="/review">Review all recordings →</a></div><progress id="progress" class="progress" value="0" max="1"></progress></div>
+  <div class="panel table-wrap"><table><thead><tr><th>Reader</th><th>Status</th><th>Target</th><th>Downloaded</th><th>Duration</th><th>Available</th><th>Marked bad</th><th></th></tr></thead><tbody id="readers"></tbody></table><p id="no-readers" class="empty" hidden>No saved readers found in this output directory.</p></div>
+  <p class="muted">Duration (hours:minutes:seconds) totals saved section lengths for downloaded files still present, including those marked bad. Available means the file is present and hasn't been marked bad. It doesn't imply a listening review. Marking a recording bad keeps its file. Completed readers collect again only when you explicitly resume.</p>
+</section>
+<section id="review" hidden>
+  <h1>Review recordings</h1><p class="muted">Browse saved candidates, listen, and record your decisions. Changes are saved automatically.</p>
+  <div class="panel toolbar filters"><label>Reader<select id="reader-filter"><option value="">All readers</option></select></label><label>Download status<select id="status-filter"><option value="">All statuses</option><option value="downloaded">Downloaded</option><option value="pending">Not downloaded</option><option value="queued">Queued</option><option value="downloading">Downloading</option><option value="failed">Failed</option><option value="missing">Missing file</option></select></label><label>Decision<select id="decision-filter"><option value="">All decisions</option><option value="unreviewed">Unreviewed</option><option value="keep">Kept</option><option value="reject">Marked bad</option></select></label><span class="spacer"></span><span id="showing" class="muted"></span></div>
+  <div id="groups"></div><p class="empty" id="no-recordings" hidden>No recordings match these filters. Saved state and skipped projects remain available below each reader.</p>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeLink=s=>/^https?:\/\//i.test(s||'')?esc(s):'#';
+function downloadedDuration(reader){
+ const seconds=Math.round(reader.candidates.reduce((n,c)=>n+(c.audio_url&&c.download?.status==='done'?(Number(c.section?.seconds)||0):0),0));
+ return `${Math.floor(seconds/3600)}:${String(Math.floor(seconds/60)%60).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
+}
+const params=new URLSearchParams(location.search);
+const reviewing=location.pathname==='/review';
+$('overview').hidden=reviewing;$('review').hidden=!reviewing;
+$(reviewing?'review-link':'overview-link').classList.add('active');
+const cards=new Map(),groups=new Map();let data=null,readerOptions='',first=true;
+function error(message){$('error').textContent=message;$('error').hidden=!message;}
+async function post(action,body={}){try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error(await r.text());error('');await refresh();}catch(e){error(e.message);}}
+$('collect').onclick=()=>post('start',data.mode==='interactive'?{n:Number($('count').value)}:{});
+$('pause').onclick=()=>post('pause');$('scan-more').onclick=()=>post('scan_more',{n:10});
+$('readers').onclick=e=>{const b=e.target.closest('button[data-start]');if(b)post('start',{reader:b.dataset.start});};
+$('groups').onclick=e=>{const b=e.target.closest('button[data-action]');if(!b)return;const card=b.closest('.record');const body={reader:card.dataset.reader,url:card.dataset.url};if(b.dataset.action==='decide')body.decision=b.dataset.decision||null;post(b.dataset.action,body);};
+$('groups').addEventListener('error',e=>{if(e.target.tagName==='AUDIO'&&e.target.dataset.remote==='true'&&e.target.dataset.quality==='128'){const card=e.target.closest('.record');post('missing_128',{reader:card.dataset.reader,url:card.dataset.url});}},true);
+for(const id of ['reader-filter','status-filter','decision-filter'])$(id).onchange=()=>{const q=new URLSearchParams();for(const [key,field]of [['reader','reader-filter'],['status','status-filter'],['decision','decision-filter']])if($(field).value)q.set(key,$(field).value);history.replaceState(null,'','/review'+(q.size?'?'+q:''));renderReview();};
+$('status-filter').value=params.get('status')||'';$('decision-filter').value=params.get('decision')||'';
+function renderOverview(){
+ const readers=data.readers;$('total-readers').textContent=readers.length;$('total-downloaded').textContent=readers.reduce((n,r)=>n+r.downloaded,0);$('total-usable').textContent=readers.reduce((n,r)=>n+r.usable,0);
+ $('mode').textContent=data.mode==='review'?'Review only · no collection':data.mode==='batch'?'Batch collection':'Single-reader collection';
+ $('intro').textContent=data.mode==='review'?'Saved state, recordings and listening decisions. Collection is off.':'Progress across your readers. The dashboard stays open when collection finishes.';
+ $('collection-status').textContent=data.pausing?'Pausing after the current operation…':data.running?'Collection running':'Collection idle';$('collect').hidden=!data.can_collect;$('collect').disabled=data.running;$('pause').hidden=!data.running;$('pause').disabled=data.pausing;$('count-label').hidden=data.mode!=='interactive';$('scan-more').hidden=data.mode!=='interactive';
+ if(first&&data.mode==='interactive')$('count').value=readers[0]?.target||10;
+ const target=readers.reduce((n,r)=>n+r.target,0),usable=readers.reduce((n,r)=>n+r.usable,0);$('progress').hidden=!target;$('progress').max=Math.max(1,target);$('progress').value=usable;
+ $('readers').innerHTML=readers.map(r=>`<tr><td><a href="/review?reader=${encodeURIComponent(r.id)}"><strong>${esc(r.name)}</strong></a><small>${r.candidates.length} saved candidates · ${Object.keys(r.checked).length} projects checked</small></td><td>${esc(r.status)}${r.detail?`<small>${esc(r.detail)}</small>`:''}</td><td>${r.target||'—'}</td><td>${r.downloaded}</td><td style="white-space:nowrap;font-variant-numeric:tabular-nums">${downloadedDuration(r)}</td><td>${r.usable}</td><td>${r.rejected}</td><td>${data.mode==='batch'?`<button data-start="${esc(r.id)}" ${data.running?'disabled':''}>Collect / resume</button>`:''}</td></tr>`).join('');$('no-readers').hidden=readers.length>0;
+}
+function renderReview(){if(!data)return;
+ const options=data.readers.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+ if(options!==readerOptions){const selected=$('reader-filter').value||params.get('reader')||'';$('reader-filter').innerHTML='<option value="">All readers</option>'+options;$('reader-filter').value=selected;readerOptions=options;}
+ const rf=$('reader-filter').value,sf=$('status-filter').value,df=$('decision-filter').value;let shown=0,total=0;
+ const presentKeys=new Set();
+ for(const r of data.readers){
+  let g=groups.get(r.id);if(!g){g=document.createElement('section');g.innerHTML='<h2></h2><p class="muted path"></p><div class="records"></div><details class="skipped"><summary></summary><ul></ul></details><details class="state"><summary>Saved state details</summary><pre></pre></details>';$('groups').append(g);groups.set(r.id,g);}
+  g.hidden=!!rf&&rf!==r.id;g.querySelector('h2').textContent=r.name;g.querySelector('.path').textContent=r.out||'';
+  for(const c of r.candidates){total++;const key=r.id+'\0'+c.url;presentKeys.add(key);let k=cards.get(key);
+   if(!k){const el=document.createElement('article');el.className='record';el.dataset.reader=r.id;el.dataset.url=c.url;el.innerHTML='<div class="info"></div><div class="audio-row"><audio controls preload="none"></audio><span class="no-audio muted"></span><div class="actions"></div></div><details><summary>Recording details</summary><pre></pre></details>';g.querySelector('.records').append(el);k={el,src:null,info:'',actions:'',raw:''};cards.set(key,k);}
+   const d=c.download||{},matches=(!rf||rf===r.id)&&(!sf||(sf==='downloaded'?!!c.audio_url&&d.status==='done':c.review_status===sf))&&(!df||(df==='unreviewed'?!c.decision:c.decision===df));k.el.hidden=!matches;if(matches)shown++;
+   k.el.classList.toggle('rejected',c.decision==='reject');k.el.classList.toggle('kept',c.decision==='keep');
+   const tags=`<span class="tag ${c.review_status==='done'?'ok':['failed','missing'].includes(c.review_status)?'bad':''}">${esc(c.review_status==='done'?'downloaded':c.review_status)}</span>`+(c.decision?`<span class="tag ${c.decision==='keep'?'ok':'bad'}">${c.decision==='reject'?'marked bad':'kept'}</span>`:'');
+   const info=`<div class="title"><a href="${safeLink(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>${tags}</div><div class="muted">${esc(c.section?.title)} · ${((c.section?.seconds||0)/60).toFixed(1)} min · ${esc(d.quality||c.quality)} kbps · ${esc(c.type)}${c.in_range?'':' · outside preferred length'}</div>`+(d.error?`<div class="muted">${esc(d.error)}</div>`:'')+(c.missing_128?`<div class="muted">128 kbps attempt failed: ${esc(c.missing_128.why)}</div>`:'');
+   if(info!==k.info){k.el.querySelector('.info').innerHTML=info;k.info=info;}
+   let actions=`<button data-action="decide" data-decision="keep" class="${c.decision==='keep'?'on':''}" aria-pressed="${c.decision==='keep'}">Keep</button><button data-action="decide" data-decision="reject" class="bad ${c.decision==='reject'?'on':''}" aria-pressed="${c.decision==='reject'}">Mark bad</button>`+(c.decision?'<button data-action="decide" data-decision="">Clear decision</button>':'');
+   if(data.mode==='interactive'){if(c.decision!=='reject'&&!['queued','downloading'].includes(d.status)&&!(d.status==='done'&&d.quality===c.quality))actions+='<button data-action="download">Download</button>';if(c.missing_128&&!['queued','downloading'].includes(d.status))actions+='<button data-action="retry_128">Retry 128 kbps</button>';}
+   if(actions!==k.actions){k.el.querySelector('.actions').innerHTML=actions;k.actions=actions;}
+   const remote=data.mode==='interactive'&&!c.audio_url;const src=c.audio_url||(remote?(c.quality==='128'?c.section?.url128:c.section?.url64):null);const audio=k.el.querySelector('audio');audio.hidden=!src;audio.dataset.remote=String(remote);audio.dataset.quality=c.quality;
+   if(src!==k.src){if(src)audio.src=src;else audio.removeAttribute('src');k.src=src;}
+   k.el.querySelector('.no-audio').textContent=remote?'Source preview':src?'':'No local audio';
+   const raw=JSON.stringify(c,null,2);if(raw!==k.raw){k.el.querySelector('pre').textContent=raw;k.raw=raw;}
+  }
+  const skips=Object.entries(r.checked).filter(([u,v])=>v.reason);g.querySelector('.skipped summary').textContent=`Skipped projects (${skips.length})`;const skipHTML=skips.map(([u,v])=>`<li><a href="${safeLink(u)}" target="_blank" rel="noopener">${esc(v.title||u)}</a> · ${esc(v.reason)}</li>`).join('');const list=g.querySelector('.skipped ul');if(list.innerHTML!==skipHTML)list.innerHTML=skipHTML;g.querySelector('.state pre').textContent=JSON.stringify(r.state,null,2);
+ }
+ for(const[key,k]of cards)if(!presentKeys.has(key)){k.el.remove();cards.delete(key);}
+ $('showing').textContent=`${shown} of ${total} candidates`;$('no-recordings').hidden=shown>0;
+}
+let refreshing=false;
+async function refresh(){if(refreshing)return;refreshing=true;try{const response=await fetch('/api/dashboard');if(!response.ok)throw Error('Could not load saved state');data=await response.json();renderOverview();renderReview();first=false;if($('error').dataset.connection==='true'){error('');$('error').dataset.connection='false';}}catch(e){error(e.message);$('error').dataset.connection='true';}finally{refreshing=false;}}
+refresh();setInterval(refresh,2000);
+</script>
+</html>

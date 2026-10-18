@@ -21,6 +21,8 @@ The dry run validates and prints resolved jobs without writing output or contact
 ## Two dashboard pages
 
 - **Overview:** reader progress, current activity/errors, requested totals, downloaded/available/rejected counts,
+  and total downloaded duration per reader (hours:minutes:seconds, using saved LibriVox section lengths).
+  Duration includes files marked bad and excludes missing files. The page also provides collection controls
   and links to review all recordings or one reader. Collect / resume starts another pass for all readers or the
   selected reader. Pause collection stops after the current operation, keeping its progress.
 - **Review:** all saved candidates grouped by reader/project, local audio players, section lengths and qualities,
@@ -51,9 +53,29 @@ saved state, so you can close it and reopen it later. It binds only to this comp
 
 ## Batch JSON
 
-The file has an optional `defaults` object, an `output_root`, and a nonempty `readers` list. Each reader supplies
-`url`, optionally `name`, and any overrides of the defaults. Without a name, the display label is `Reader ID`.
-The sample IDs/names in the example are placeholders to replace before collection.
+The file has an optional `defaults` object, an `output_root`, and a nonempty `readers` list. Readers can be plain
+URLs, integer reader IDs, or digit strings. Use an object with `url` or `reader_id` to override a setting or
+supply a custom `name`. These forms can mix:
+
+```json
+{
+  "defaults": {"count": 10},
+  "readers": [
+    "https://librivox.org/reader/6281/",
+    {"reader_id": 456, "count": 15}
+  ]
+}
+```
+
+A simple ID-only list also works: `"readers": [6281, 456]`. IDs must be positive integers or digit strings.
+If an object supplies both `url` and `reader_id`, they must match. Duplicate readers are rejected across all
+input formats, including IDs with leading zeros.
+
+Without an explicit name, collection fetches the reader's display name from their LibriVox page and caches it
+in `state.json`, including any dates/punctuation in that name. Saved names are reused on subsequent runs; an
+explicit JSON name takes precedence. If lookup fails, collection continues as `Reader ID` and tries the name
+again on a later invocation. Dry runs remain offline and show pending names as `Reader ID`. Output directory
+identity always uses the reader ID. Replace the sample URLs in the example file with your desired readers.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -82,7 +104,9 @@ For an assistant or script that needs a command which exits when collection fini
 python -B librivox_batch.py batch.local.json --headless > batch-summary.local.json
 ```
 
-Progress goes to stderr and the final JSON summary goes to stdout. Each reader reports `completed`,
+Progress goes to stderr and the final JSON summary goes to stdout. In a terminal the download counter updates
+on one line; redirected logs contain distinct counter updates on separate lines, without terminal controls.
+Each reader reports `completed`,
 `insufficient`, `failed`, or `interrupted`; remaining readers after Ctrl+C are `not_run`. Failures and insufficient
 results allow the next reader to proceed. Exit status is 0 if all targets are met, 1 for incomplete/failed
 readers, 2 for invalid configuration, or 130 for interruption. These outcome codes apply to headless mode;

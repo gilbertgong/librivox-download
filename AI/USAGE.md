@@ -83,8 +83,13 @@ and disk space. This task includes preparing the JSON and running the existing b
 browser automation, HTTP API orchestration, additional libraries or new wrapper scripts.
 
 1. Read the README's Batch downloads section and `batch.example.json`. Prepare a `*.local.json` batch file using
-   the requested URLs and agreed defaults/overrides. Names are optional; the tool uses reader IDs for directory
-   identity and an ID-based display label when a name is absent. Do not invent names or listening decisions.
+   the requested URLs/reader IDs and agreed defaults/overrides. Prefer URL strings or positive integer IDs for
+   readers sharing defaults; use an object with url or reader_id for overrides, including an optional explicit
+   name. Digit-string IDs are accepted too. All forms can mix; matching IDs/URLs resolve to one directory identity.
+   The tool fetches a
+   missing name once at collection time and caches it in state, reusing saved names on subsequent runs. Name
+   lookup failures fall back to Reader ID without blocking collection and retry on a later invocation. Dry runs
+   remain offline with placeholder labels. Reader IDs identify directories. Don't invent names or listening decisions.
 2. Confirm the count is a total number of recordings per reader, not additional recordings or a duration target.
    The tool takes one section per project. State the existing 64 kbps fallback policy if it matters to the request;
    strict 128-only collection and automatic transcript collection are not supported by this batch schema.

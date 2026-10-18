@@ -1,0 +1,13 @@
+{
+  "defaults": {
+    "count": 10,
+    "language": "English",
+    "range_minutes": [5, 15],
+    "timeout_minutes": 60
+  },
+  "output_root": "downloads",
+  "readers": [
+    "https://librivox.org/reader/123/",
+    {"reader_id": 456, "count": 15}
+  ]
+}

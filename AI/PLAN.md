@@ -45,7 +45,14 @@ without starting collection. A headless option remains for automation. No instal
   reports insufficiency separately from failures, and continues after individual failures. A configurable
   per-reader time budget is checked between operations. Only actual listing exhaustion permits batch backups.
   This keeps AI-assisted collection bounded and observable while reusing the existing selection/transfer logic.
-- Overview summarizes reader activity/errors/counts and explicit collection controls. Review presents all saved
+- The readers list accepts URL strings, positive integer/digit-string reader IDs, and objects with url or
+  reader_id plus per-reader overrides. IDs normalize before duplicate/matching-URL checks. Names resolve from the
+  LibriVox reader-page title at collection time, cache in state, and preserve display punctuation/dates. Explicit
+  names take precedence, followed by cached labels. Failed lookup uses Reader ID and retries next invocation;
+  dry runs and review mode never fetch names. Directories remain ID-based so display names don't move data.
+- Overview summarizes reader activity/errors/counts, per-reader downloaded duration and explicit collection
+  controls. Duration sums saved section lengths for completed files still present, including rejected files,
+  and displays hours:minutes:seconds; it does not decode audio. Review presents all saved
   candidates, local players, decision/status/reader filters, skipped reasons and expandable full state. Review
   reads legacy state without conversion or side effects. Keep/Mark bad/Clear writes only the requested decision
   and timestamp, preserving other metadata and recordings. There is no saved HTML index or review database.

@@ -236,3 +236,43 @@ local playback, phone-width layout without horizontal overflow, and a clean cons
 CLI entry points showed the shared dashboard using scratch collections, with batch completion and explicit
 resume leaving the server available. Test servers stopped; existing user output wasn't used as a fixture,
 and research jobs were left alone.
+
+## 2026-10-18: URL-only readers and cached display names
+
+The user requested a simpler readers list because LibriVox pages already contain display names. Verified the
+shared `Works read by NAME | LibriVox` title on three reader pages, then added plain URL entries alongside
+existing objects for count/filter/name overrides. Names resolve at collection time, after resume validation,
+and save with their source in state. Explicit names override cached names; existing meaningful saved labels
+are reused. Failed lookups use Reader ID and retry on a later invocation instead of blocking collection.
+Display names retain punctuation, HTML entities and date annotations. Directory identity remains the reader ID.
+Dry-run validation stays offline, and review mode continues reading saved names without network requests.
+
+Updated the example, README, plan and usage guide. Validation: 43 tests pass, including mixed URL/object entries,
+actual local HTTP name resolution in the two-reader workflow, cached no-network resumption, explicit precedence,
+entity/date parsing, missing/empty titles, network failures and later recovery. The implemented name parser also
+resolved the provided live reader URL successfully without downloading any audio.
+
+## 2026-10-18: in-place terminal download progress
+
+The user requested that repeated per-transfer counters reuse one terminal line. Added terminal-aware stderr
+progress that redraws with a carriage return, clears leftover characters if the text shrinks, and ends the line
+before final statuses/errors, including interruption. Duplicate counts are suppressed. Redirected logs retain
+newline-separated distinct updates without control characters; stdout JSON is unchanged. No active downloader
+was found before editing. Terminal/redirection checks and the full 45-test suite pass; no collection launched.
+
+## 2026-10-18: reader ID inputs
+
+The user requested reader_id as an alternative to reader URLs. Batch entries now accept integer/digit-string
+IDs directly and objects with reader_id plus overrides. All forms normalize to the canonical reader URL/ID;
+duplicates are detected across formats and a supplied ID/URL pair must agree. Booleans, fractions, nonpositive
+or malformed IDs are rejected. Name lookup/cache behavior is unchanged. Updated the example and operational
+docs. All 47 tests pass, including normalization, overrides, conflicts and cross-format duplicates. Parser
+changes apply on subsequent launches; no collection was launched for validation.
+## 2026-10-18: downloaded duration on Overview
+
+Added a per-reader Duration column in hours:minutes:seconds, as requested. It sums saved LibriVox section
+lengths for completed downloads whose local files remain present, including recordings marked bad. Missing,
+pending and failed downloads are excluded. This uses existing snapshot fields in the browser, with no audio
+decoding, new dependencies or backend changes; refreshing the page updates an already running dashboard.
+README and plan updated. JavaScript syntax and focused calculation checks pass for empty collections,
+rejected/missing/failed files, rounding, absent duration metadata and totals over 24 hours. No collection launched.
