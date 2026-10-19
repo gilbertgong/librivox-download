@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from unittest.mock import patch
@@ -37,6 +38,44 @@ class DashboardTests(unittest.TestCase):
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(base + path, data=data, headers=headers or {}, method=method)
         return urllib.request.urlopen(request, timeout=5)
+
+    def disconnected_request(self, path, error, fail_write=2, body=None):
+        class Writer(io.BytesIO):
+            writes = 0
+            def write(self, data):
+                self.writes += 1
+                if self.writes == fail_write:
+                    raise error('fixture disconnected')
+                return super().write(data)
+        handler_type = web.make_handler(web.Dashboard.for_review(self.root))
+        handler = handler_type.__new__(handler_type)
+        payload = json.dumps(body).encode() if body is not None else b''
+        verb = 'POST' if body is not None else 'GET'
+        request = f'{verb} {path} HTTP/1.0\r\nHost: localhost\r\nContent-Length: {len(payload)}\r\n\r\n'.encode() + payload
+        handler.rfile, handler.wfile = io.BytesIO(request), Writer()
+        handler.client_address = ('127.0.0.1', 12345)
+        handler.handle()
+        return handler
+
+    def test_client_disconnects_during_headers_json_and_media_are_quiet(self):
+        media = '/media?' + urllib.parse.urlencode({'reader': '1', 'url': self.c['url']})
+        for error in web.CLIENT_DISCONNECTS:
+            for path in ('/api/dashboard', media):
+                for fail_write in (1, 2):
+                    with self.subTest(error=error, path=path, fail_write=fail_write):
+                        handler = self.disconnected_request(path, error, fail_write)
+                        self.assertTrue(handler.close_connection)
+
+    def test_disconnect_after_decision_does_not_lose_saved_change_or_send_error_response(self):
+        handler = self.disconnected_request('/api/decide', ConnectionAbortedError, body={
+            'reader': '1', 'url': self.c['url'], 'decision': 'keep'})
+        self.assertEqual(handler.wfile.writes, 2)
+        saved = json.loads(self.st.path.read_text())
+        self.assertEqual(saved['candidates'][0]['decision'], 'keep')
+
+    def test_unrelated_io_errors_are_not_silenced(self):
+        with self.assertRaises(PermissionError):
+            self.disconnected_request('/api/dashboard', PermissionError)
 
     def post(self, base, action, **body):
         with self.request(base, "/api/" + action, body) as response:

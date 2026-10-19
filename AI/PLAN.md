@@ -17,7 +17,11 @@ without starting collection. A headless option remains for automation. No instal
 ## Approach and reasons
 
 - Scan only LibriVox metadata. Contact the audio host only for chosen playback/download URLs; this avoids
-  unnecessary metadata requests and keeps selection grounded in the reader and project pages.
+  unnecessary metadata requests. Use the official extended audiobooks API for project sections/readers/durations
+  and source links. Query known project IDs directly; otherwise paginate exact-title searches and require an
+  exact normalized catalog URL match. Never choose an edition solely by its title. Normalize section order.
+  Retain the reader-listing AJAX endpoint and name-page lookup: the documented API has no reader-search route.
+  Unsupported/incomplete API data or request failures fall back to HTML, with provenance/error recorded.
 - Solo means the section's reader list is exactly the requested reader. Collaborative books are eligible;
   dramatic readings, other languages (unless disabled), and pages without per-section reader lists are skipped.
 - Offer the first section in the preferred 5–15 minute range, otherwise the closest, never under one minute.
@@ -50,12 +54,12 @@ without starting collection. A headless option remains for automation. No instal
 - Collection now seeks the requested premium total, accepting degraded files only after listing exhaustion.
   Explicit resumption with degraded existing downloads looks for premium replacements without deleting files
   or decisions, so total saved files can exceed the target. Summaries include premium/degraded counts.
-- Capture source URL/project ID from the already-fetched LibriVox page. Normalize Gutenberg IDs, fetch original
+- Capture source URL/project ID from the API project record, with page parsing as a fallback. Normalize Gutenberg IDs, fetch original
   whole-book UTF-8 text through a listed mirror, and cache once under output_root/texts/gutenberg/ID with checksum,
   actual URL and retrieval time. No main-site scraping or Gutendex dependency. download_texts defaults true;
   false disables text-based degradation. Text settings can change on resume without invalidating section checks.
   Missing/unsupported/failed text stays visible, retries once per candidate on a later pass and never prevents
-  fallback audio collection. Review-only reads state/cache without network or migration. Exact chapter text,
+  fallback audio collection. Review-only startup reads state/cache without network or migration. Exact chapter text,
   text cleanup and audio/text alignment are outside this feature.
 - The readers list accepts URL strings, positive integer/digit-string reader IDs, and objects with url or
   reader_id plus per-reader overrides. An optional _ignore field at the top level, in defaults or in reader
@@ -79,6 +83,16 @@ without starting collection. A headless option remains for automation. No instal
   During active collection, rejected recordings don't count toward its total. Pause/shutdown stop between
   operations and wait for in-flight work; the dashboard remains open when a batch completes. Loopback audio
   serving supports seeking and stays inside each reader's output directory.
+  Broken-pipe, reset and aborted browser connections close quietly at the request boundary, including header,
+  polling, decision-response and media writes. Other exceptions remain visible; disconnects after a successful
+  mutation do not trigger a second response or undo the saved operation.
+- Review's explicit Rescan refreshes the selected reader or all readers sequentially, including in review-only
+  mode with saved selection settings. Restart from page one, clear checked-project results and recheck skipped
+  projects within the normal candidate target/time budget. Preserve downloads, decisions, chosen reviewed/audio
+  sections and custom metadata; unreviewed pending sections can refresh. Retain ineligible old candidates but
+  exclude them from new transfers. No audio/book downloads during rescan. Pause and status/error reporting are
+  available. Stop/join old single-reader workers before resetting checks; leave collection idle afterward and
+  restart scanning only when requested. State inspection alone still performs no network work.
 
 ## Results so far
 
@@ -95,6 +109,8 @@ See the latest dated log entry for validation of the maintenance changes and its
 - `tests/test_librivox_fetch.py`: isolated standard-library tests with temporary output and local HTTP fixtures.
 - `librivox_batch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
 - `librivox_text.py`: source links, Gutenberg URL normalization, spaced mirror requests and shared text cache.
+- `librivox_api.py`: official API lookup by ID or exact title plus URL identity, normalized sections.
+- `tests/test_api_rescan.py`: API matching/fallback, fresh scan bounds, preservation, concurrency and worker lifecycle.
 - `tests/test_texts.py`: offline mirror/provenance/retry, legacy enrichment and premium replacement checks.
 - `batch.example.json`: example defaults, reader overrides and output root; copy to an ignored `*.local.json`.
 - `tests/test_batch.py`: offline batch validation, local HTTP collection, resume, failure and interruption tests.
@@ -106,8 +122,8 @@ See the latest dated log entry for validation of the maintenance changes and its
 
 ## Known limitations
 
-- LibriVox HTML parsing uses regular expressions tied to the site's current markup. If scanning breaks after a
-  site change, inspect `listing_pages` and `read_project` first.
+- Reader listing/name and fallback HTML parsing still depend on site markup. Project details normally use the
+  API; inspect `librivox_api.py` and `read_project` if its schema changes.
 - Failed project-page checks are saved as skips. A listing-level exception stops scanning; the existing worker
   treats that as scanning finished, which also permits bulk backups. Read the UI status before judging coverage.
 - Completion checks confirm that the recorded file exists, not that MP3 content is valid or unmodified.
@@ -115,7 +131,8 @@ See the latest dated log entry for validation of the maintenance changes and its
 - Batch mode retries failed transfers once on the next invocation. Its time budget is checked between
   operations, not a hard interruption of an in-flight network operation. No concurrent writers to one output.
 - Reuse an output directory for the same reader and selection options. Existing checked projects are not
-  re-evaluated when CLI filters change; use a fresh `--out` to make a new selection.
+  re-evaluated when CLI filters change; use a fresh `--out` to make a new selection. Explicit Rescan rechecks
+  metadata using the existing filters, never silently changes selection settings.
 
 ## Open questions and next steps
 

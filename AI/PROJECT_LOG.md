@@ -338,3 +338,53 @@ its contents are neither interpreted nor included in resolved jobs. Other unknow
 The field does not disable its containing reader. README/plan updated. All 62 offline tests pass, including a
 regression proving ignored nested settings/invalid reader data leave resolved jobs unchanged. No active downloader
 was found before editing; no collection or user state changed.
+
+## 2026-10-18: API-first project details and explicit Rescan
+
+The user requested using the API wherever possible and a Review Rescan button. Added a standard-library API
+adapter using the official extended audiobooks endpoint for sections, reader IDs, duration, audio URLs and
+source links. Known project IDs query directly; unknown IDs use paginated exact-title lookup with mandatory
+catalog-URL identity matching, including http/https/www variants. Sort sections numerically. Missing/unsupported
+API fields, identity misses or request failures fall back to HTML, recording the reason in source provenance.
+Reader listings and name lookup still use the website because the documented API has no reader-search endpoint.
+Legacy text enrichment now uses the same API-first project path. No dependency or selection-default changes.
+
+Review now offers Rescan for the selected reader or all readers sequentially, including when opened with
+--review. Explicit rescan clears old checked-project results and restarts at page one, rechecking skips/errors
+within the normal candidate goal and reader time budget. It only refreshes metadata, never downloads audio or
+books. Preserve recordings, choices, review decisions, cached books and custom metadata; unreviewed pending
+candidates may refresh, and alternatives for protected choices appear in last_scan details. Retain semantically
+ineligible old candidates but exclude them from new transfer/queue selection. Normalize project identity to
+avoid duplicates while retaining existing URLs for protected cards. Review startup and decision edits still do
+not start network work. Saved selection settings are required for review-only rescan; unknown legacy settings
+are not invented or silently rewritten.
+
+Rescan has Pause scan and visible per-reader result/error details. Distinguish candidate target, actual listing
+exhaustion, timeout, pause and failures. Serialize registration/review writes and collection/rescan starts.
+Stop/join old single-reader workers before resetting checks, restart only its idle downloader afterward, and
+start scanning again on a subsequent collection/scan-more request. Existing media and decisions survive both
+API rechecks and concurrent review actions. Updated README, plan and operational usage instructions.
+
+Validation: all 78 offline tests pass (62 prior plus 16 API/rescan checks). Local HTTP batch integration now
+exercises API data without project HTML; tests cover exact identity, pagination, direct IDs, section order,
+incomplete data and fallback, shared readers, fresh scan bounds, old skip recovery, read-only media preservation,
+custom fields, http/www identity variants, semantic ineligibility/queue guards, listing failure vs exhaustion,
+pause, live decisions, busy/legacy guards, POST routing, reader scope and single-reader worker lifecycle.
+JavaScript syntax passes. A live one-project metadata check returned sections and source provenance in one API
+request with no HTML/audio/text requests. Browser verification against an isolated saved API fixture exercised
+Rescan, observed disabled/active controls, rediscovered a previously skipped project and showed completion with
+no console errors or media downloads. Temporary server stopped; no existing user collections/configs/jobs changed.
+
+## 2026-10-18: quiet browser disconnects
+
+The user reported ConnectionAbortedError / WinError10053 while writing a dashboard polling response. Catch
+BrokenPipeError, ConnectionResetError and ConnectionAbortedError at the HTTP connection boundary, covering
+request reads and response headers/bodies. Mark the connection closed. Media streaming also handles the same
+specific exceptions. File/mutation error handlers let disconnects reach that boundary rather than incorrectly
+sending a second 404/400 response. Other errors are not suppressed, and completed decisions remain saved when
+the browser disconnects before receiving their response. README and plan updated.
+
+Validation: all 81 offline tests pass, including simulated disconnects during headers, JSON, audio and decision
+responses, plus propagation of unrelated I/O errors. All 15 dashboard tests also pass under the reported MSYS2
+Python3.14 interpreter; existing HTTP-error fixture objects emitted ResourceWarnings during test cleanup.
+The user's active batch was left running; the loaded server receives this fix on its next launch.

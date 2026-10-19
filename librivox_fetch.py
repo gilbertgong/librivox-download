@@ -6,8 +6,9 @@
 A reader's LibriVox page lists every project they took part in: solo books, collaborative books where they read a
 few chapters, dramatic readings (cast performances, skipped), and some they only coordinated. The server reads that
 listing a page at a time in the background and checks each project as it comes in. A project is a candidate if a
-section's reader list is exactly this reader and the section is at least --min-seconds long. Projects whose pages
-don't list readers per section are skipped. Everything is decided from LibriVox's pages, never archive.org.
+section's reader list is exactly this reader and the section is at least --min-seconds long. Projects without
+per-section reader metadata are skipped. Details prefer LibriVox's official API, with HTML as a fallback;
+reader discovery/name lookup still uses the website. Audio-host metadata is not used for selection.
 
 One section per project is offered: the first one 5-15 minutes long (--range), or, if none is, the one closest to
 that range. Its file is the 128 kbps one, judged by name (`*_128kb.mp3`). A 64 kbps file is suboptimal: it's used
@@ -40,6 +41,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import librivox_text as texts
+import librivox_api as api
 
 USER_AGENT = "librivox-download (personal research)"
 DELAY = 0.5  # seconds between LibriVox page requests
@@ -89,7 +91,7 @@ def listing_pages(rid, order):
         projects = []
         for url, title, meta in items:
             parts = [p.strip() for p in meta.split("|")]
-            projects.append({"url": url, "title": html.unescape(title),
+            projects.append({"url": url, "title": html.unescape(re.sub(r"<[^>]+>", "", title)),
                              "type": parts[1] if len(parts) > 1 else "", "language": parts[-1]})
         yield page, projects
         pages = [int(n) for n in re.findall(r'data-page_number="(\d+)"', data["pagination"])]
@@ -110,9 +112,24 @@ def file_urls(link, play):
     return url128, url64
 
 
-def read_project(url):
-    """The project page's sections: [{title, readers, seconds, url128, url64}]."""
-    page = get(url)
+def read_project(url, project_id=None, title=None):
+    """Prefer official API data, using HTML only to resolve an unknown ID or as a fallback."""
+    page = None
+    try:
+        if not project_id and not title:
+            page = get(url)
+            project_id = texts.source_info(page)["project_id"]
+        return api.sections(api.project(get, url, project_id, title), file_urls)
+    except Exception as e:
+        sections = read_project_html(url, page)
+        for section in sections:
+            section["source"].update(metadata_source="html", api_error=str(e))
+        return sections
+
+
+def read_project_html(url, page=None):
+    """Fallback for unavailable/incomplete API records; the original page-based section parser."""
+    page = get(url) if page is None else page
     source = texts.source_info(page)
     table = re.search(r'<table class="chapter-download">(.*?)</table>', page, re.S)
     sections = []
@@ -143,7 +160,7 @@ def pick_section(solo, lo, hi):
 
 def check(project, rid, args):
     """(candidate dict, None), or (None, why not)."""
-    sections = read_project(project["url"])
+    sections = read_project(project["url"], project.get("project_id"), project.get("title"))
     if not sections:
         return None, "no section table"
     if not any(s["readers"] for s in sections):
@@ -272,14 +289,16 @@ class State:
         tmp.replace(self.path)
 
     def find(self, url):
-        return next((c for c in self.candidates if c["url"] == url), None)
+        if not isinstance(url, str):
+            return None
+        return next((c for c in self.candidates if api.project_key(c["url"]) == api.project_key(url)), None)
 
     def goal(self):
         """Prime candidates the scan aims for: the target, or more if "Download N" asks for more."""
         return max(self.target, self.want_downloads)
 
     def good_prime(self):
-        return sum(is_prime(c) and c["decision"] != "reject" for c in self.candidates)
+        return sum(is_prime(c) and c.get("scan_eligible", True) and c["decision"] != "reject" for c in self.candidates)
 
     def downloaded(self):
         return sum(bool(c["download"]) and c["download"]["status"] == "done" and c["decision"] != "reject"
@@ -321,7 +340,7 @@ class State:
         """An individual request stays in the saved queue until its transfer finishes. Lock held."""
         self.reconcile_downloads()
         d = c["download"]
-        if c["decision"] == "reject" or (d and d["status"] == "downloading"):
+        if not c.get("scan_eligible", True) or c["decision"] == "reject" or (d and d["status"] == "downloading"):
             return
         if d and d["status"] == "done" and d["quality"] == c["quality"]:
             return
@@ -355,11 +374,14 @@ def selection_options(args):
             "min_seconds": getattr(args, "min_seconds", 60), "order": getattr(args, "order", "alpha")}
 
 
-def scan_project(st, p):
+def scan_project(st, p, refresh=False):
     """Check and record one project using the same rules in interactive and batch modes. Lock not held."""
     with st.lock:
-        if p["url"] in st.checked:
+        if p["url"] in st.checked and not refresh:
             return
+        old = st.find(p["url"])
+        if old and (old.get("source") or {}).get("project_id"):
+            p = {**p, "project_id": old["source"]["project_id"]}
     if p["type"] == "Dramatic":
         reason = "dramatic reading"
     elif st.args.language and p["language"] != st.args.language:
@@ -373,9 +395,87 @@ def scan_project(st, p):
         st.checked[p["url"]] = {"title": p["title"], "type": p["type"], "reason": reason}
         if not reason:
             cand["text_required"] = getattr(st.args, "download_texts", True)
-            st.candidates.append(cand)
+            if old and (old.get("download") or old.get("decision")):
+                # An existing choice must not silently become a different chapter/recording.
+                old["last_scan"] = {"at": now(), "reason": None, "source": cand["source"],
+                                    "section": cand["section"]}
+                if not (old.get("source") or {}).get("url_text_source"):
+                    old["source"] = cand["source"]
+                old["scan_eligible"] = True
+            elif old:
+                # Retain a cached book if the refreshed unreviewed section uses the same source.
+                if (old.get("source") or {}).get("gutenberg_id") == cand["source"].get("gutenberg_id") and old.get("text"):
+                    cand["text"] = old["text"]
+                else:
+                    old.pop("text", None)
+                old.update(cand)
+                old.pop("missing_128", None)
+                old.pop("text_retry_pending", None)
+                old["scan_eligible"] = True
+                old["last_scan"] = {"at": now(), "reason": None}
+            else:
+                st.candidates.append(cand)
+        elif old:
+            old["last_scan"] = {"at": now(), "reason": reason}
+            if not reason.startswith("error:"):
+                old["scan_eligible"] = False
         st.save()
     st.wake.set()
+
+
+def rescan_reader(st, stop, timeout_minutes=60):
+    """Fresh bounded metadata pass, preserving recorded choices/files and never downloading media."""
+    deadline = time.monotonic() + timeout_minutes * 60
+    with st.lock:
+        st.checked.clear()
+        st.page, st.scan_done, st.collecting = 0, False, False
+        st.status = "rescanning"
+        started = now()
+        st.extra["last_rescan"] = {"started_at": started, "status": "rescanning"}
+        st.save()
+    found, seen = 0, set()
+    status, detail = "rescanned", "listing exhausted"
+    exhausted = False
+    try:
+        for page, projects in listing_pages(st.rid, st.args.order):
+            with st.lock:
+                st.page = page
+            for p in projects:
+                if stop.is_set():
+                    status, detail = "scan paused", "resume with Rescan to start again from the first page"
+                    break
+                if time.monotonic() >= deadline:
+                    status, detail = "scan incomplete", "reader time budget exceeded"
+                    break
+                if p["url"] in seen:
+                    continue
+                seen.add(p["url"])
+                scan_project(st, p, refresh=True)
+                with st.lock:
+                    c = st.find(p["url"])
+                    found += bool(c and not st.checked[p["url"]]["reason"] and c["decision"] != "reject" and is_prime(c))
+                    enough = found >= st.goal()
+                if enough:
+                    detail = "candidate target reached"
+                    break
+            else:
+                continue
+            break
+        else:
+            exhausted = True
+    except Exception as e:
+        status, detail = "scan failed", str(e)
+    with st.lock:
+        errors = sum(bool(v.get("reason")) and v["reason"].startswith("error:") for v in st.checked.values())
+        if errors and status == "rescanned":
+            status = "scan incomplete"
+            detail += f"; {errors} project checks failed"
+        st.scan_done = exhausted
+        st.status = status
+        st.extra["last_rescan"] = {"started_at": started, "finished_at": now(), "status": status,
+                                   "detail": detail, "checked": len(st.checked)}
+        st.save()
+    return {"status": status, "detail": detail}
 
 
 def scanner(st):
@@ -414,12 +514,12 @@ def next_download(st):
     st.reconcile_downloads()
     while st.queue:
         c = st.find(st.queue[0])
-        if c and c["decision"] != "reject" and not (c["download"] and c["download"]["status"] == "done"):
+        if c and c.get("scan_eligible", True) and c["decision"] != "reject" and not (c["download"] and c["download"]["status"] == "done"):
             return c
         st.queue.pop(0)
     if st.collection_satisfied():
         return None
-    pending = [c for c in st.candidates if c["decision"] != "reject" and
+    pending = [c for c in st.candidates if c.get("scan_eligible", True) and c["decision"] != "reject" and
                (not c["download"] or c["download"]["status"] == "missing")]
     for c in pending:
         if is_prime(c):
@@ -434,7 +534,8 @@ def prepare_text(st, c):
     source = c.get("source") or {}
     if not source or not source.get("project_id"):
         try:
-            source = texts.source_info(get(c["url"]))  # enrich legacy candidates without changing selection
+            sections = read_project(c["url"], source.get("project_id"), c.get("title"))
+            source = sections[0]["source"] if sections else source
         except Exception as e:
             result = {"status": "failed", "reason": f"Source lookup failed: {e}"}
         else:

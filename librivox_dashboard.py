@@ -7,8 +7,11 @@ import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from types import SimpleNamespace
 
 import librivox_fetch as app
+
+CLIENT_DISCONNECTS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
 
 class Dashboard:
@@ -22,6 +25,11 @@ class Dashboard:
         self.stop = threading.Event()
         self.worker = None
         self.running = False
+        self.rescanning = False
+        self.serving = False
+        self.closing = False
+        self.scan_thread = None
+        self.download_thread = None
         self.interactive = interactive
         self.threads = []
         if interactive:
@@ -109,12 +117,13 @@ class Dashboard:
                                        "degraded_reasons": reasons})
                 present = [c for c in candidates if c["audio_url"] and (c.get("download") or {}).get("status") == "done"]
                 result = results.get(rid, {})
+                last_scan = saved.get("last_rescan") or {}
                 readers.append({"id": rid, "name": saved.get("reader", f"Reader {rid}"),
                                 "url": saved.get("reader_url", f"https://librivox.org/reader/{rid}/"),
                                 "out": str(self.paths[rid].parent),
                                 "target": self.jobs[rid]["count"] if rid in self.jobs else saved.get("want_downloads", 0),
                                 "status": result.get("status", saved.get("status", "saved state")),
-                                "detail": result.get("detail", ""), "downloaded": len(present),
+                                "detail": result.get("detail", last_scan.get("detail", "") if saved.get("status") == last_scan.get("status") else ""), "downloaded": len(present),
                                 "usable": sum(c.get("decision") != "reject" for c in present),
                                 "premium": sum(c.get("decision") != "reject" and not c["degraded_reasons"] for c in present),
                                 "rejected": sum(c.get("decision") == "reject" for c in candidates),
@@ -125,7 +134,8 @@ class Dashboard:
                                 "target": 0, "downloaded": 0, "usable": 0, "premium": 0, "rejected": 0, "kept": 0,
                                 "candidates": [], "checked": {}, "state": {}})
         return {"mode": "interactive" if self.interactive else "batch" if self.jobs else "review",
-                "running": self.interactive.collecting if self.interactive else running,
+                "running": running or bool(self.interactive and self.interactive.collecting),
+                "rescanning": self.rescanning, "can_rescan": bool(self.paths),
                 "pausing": running and self.stop.is_set(),
                 "can_collect": bool(self.jobs or self.interactive), "readers": readers}
 
@@ -148,19 +158,23 @@ class Dashboard:
 
     def start(self, rid=None, count=None):
         if self.interactive:
-            st = self.interactive
-            with st.lock:
-                if count is not None:
-                    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
-                        raise ValueError("count must be a positive integer")
-                    st.want_downloads = count
-                elif not st.want_downloads:
-                    st.want_downloads = st.args.count
-                if not st.collecting:
-                    st.reset_text_attempts()
-                st.collecting = True
-                st.save()
-            st.wake.set()
+            with self.lock:
+                if self.running:
+                    raise ValueError("wait for the metadata rescan to finish or pause it")
+                st = self.interactive
+                with st.lock:
+                    if count is not None:
+                        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+                            raise ValueError("count must be a positive integer")
+                        st.want_downloads = count
+                    elif not st.want_downloads:
+                        st.want_downloads = st.args.count
+                    if not st.collecting:
+                        st.reset_text_attempts()
+                    st.collecting = True
+                    st.save()
+                st.wake.set()
+                self.ensure_interactive_workers()
             return
         with self.lock:
             if self.running:
@@ -188,6 +202,94 @@ class Dashboard:
             self.worker = threading.Thread(target=work, daemon=True)
             self.worker.start()
 
+    def ensure_interactive_workers(self, scan=True):
+        """Start missing workers only for a live server, never for state-only inspection/tests."""
+        with self.lock:
+            if not self.interactive or not self.serving or self.closing or self.rescanning:
+                return
+            for attr, target in (("scan_thread", app.scanner), ("download_thread", app.downloader)):
+                if attr == "scan_thread" and (not scan or self.interactive.scan_done):
+                    continue
+                thread = getattr(self, attr)
+                if thread and thread.is_alive():
+                    continue
+                thread = threading.Thread(target=target, args=(self.interactive,), daemon=True)
+                setattr(self, attr, thread)
+                self.threads.append(thread)
+                thread.start()
+
+    def rescan(self, rid=None):
+        """Explicit metadata-only refresh, including when opened with --review."""
+        import librivox_batch as batch
+        with self.lock:
+            if self.running or (self.interactive and (self.interactive.collecting or self.interactive.queue)):
+                raise ValueError("pause collection and wait for outstanding downloads before rescanning")
+            if rid is not None and rid not in self.paths:
+                raise ValueError("unknown reader")
+            ids = [rid] if rid else list(self.paths)
+            if not ids:
+                raise ValueError("no readers to rescan")
+            settings = []
+            for reader in ids:
+                saved = self.read(reader)
+                if self.interactive:
+                    args = self.interactive.args
+                elif reader in self.jobs:
+                    args = batch.reader_args(self.jobs[reader])
+                    batch.validate_resume(self.jobs[reader], args)
+                else:
+                    selection = saved.get("selection")
+                    if not isinstance(selection, dict) or not {"language", "range_minutes", "min_seconds", "order"} <= selection.keys():
+                        raise ValueError("rescan requires saved selection settings; keep legacy state for review and use a new configured collection to scan")
+                    args = SimpleNamespace(name=saved.get("reader", f"Reader {reader}"),
+                                           url=f"https://librivox.org/reader/{reader}/",
+                                           projects=max(20, int(saved.get("target", 20))),
+                                           count=max(1, int(saved.get("want_downloads", 1))),
+                                           range=selection["range_minutes"], language=selection["language"],
+                                           min_seconds=selection["min_seconds"], order=selection["order"],
+                                           download_texts=saved.get("download_texts", False),
+                                           text_mirror=app.texts.DEFAULT_MIRROR)
+                settings.append((reader, args, self.jobs.get(reader, {}).get("timeout_minutes", 60)))
+            self.stop.clear()
+            self.running = self.rescanning = True
+            for reader in ids:
+                self.results[reader] = {"status": "waiting to rescan"}
+
+            def work():
+                try:
+                    if self.interactive:
+                        # Stop the old listing iterator before resetting checks. Preserve queued intent.
+                        self.interactive.stop.set()
+                        self.interactive.wake.set()
+                        for thread in self.threads:
+                            thread.join()
+                        if not self.closing:
+                            self.interactive.stop.clear()
+                    for reader, args, timeout in settings:
+                        if self.stop.is_set():
+                            with self.lock:
+                                self.results[reader] = {"status": "scan paused", "detail": "rescan not started"}
+                            continue
+                        try:
+                            with self.lock:
+                                state = self.interactive or self.state_factory(args, reader, self.paths[reader].parent)
+                                self.results.pop(reader, None)
+                            result = app.rescan_reader(state, self.stop, timeout)
+                        except Exception as e:
+                            result = {"status": "scan failed", "detail": str(e)}
+                        with self.lock:
+                            self.results[reader] = result
+                            if not self.interactive:
+                                self.states.pop(reader, None)
+                finally:
+                    with self.lock:
+                        self.running = self.rescanning = False
+                    # Remain idle after a metadata pass; Collect / resume can start a new scanner later.
+                    self.ensure_interactive_workers(scan=False)
+
+            self.worker = threading.Thread(target=work, daemon=True)
+            self.worker.start()
+
     def pause(self):
         self.stop.set()
         if self.interactive:
@@ -200,6 +302,8 @@ class Dashboard:
             if rid is None and len(self.paths) == 1:
                 rid = next(iter(self.paths))
             state = self.states.get(rid)
+            if self.rescanning and action != "decide":
+                raise ValueError("wait for the metadata rescan to finish")
             if action != "decide" and (self.interactive is None or state is not self.interactive):
                 raise ValueError("collection actions are available only in single-reader mode")
             lock = state.lock if state else self.lock
@@ -243,6 +347,13 @@ class Dashboard:
 
 def make_handler(dashboard):
     class Handler(BaseHTTPRequestHandler):
+        def handle(self):
+            try:
+                super().handle()
+            except CLIENT_DISCONNECTS:
+                # Browser navigation, cancelled polling or stopped playback can close the local socket.
+                self.close_connection = True
+
         def log_message(self, *args):
             pass
 
@@ -279,6 +390,8 @@ def make_handler(dashboard):
                         self.send(200, path.read_bytes(), "text/plain; charset=utf-8")
                     else:
                         self.media(path)
+                except CLIENT_DISCONNECTS:
+                    raise  # handled at the connection boundary, not as a missing file
                 except (OSError, ValueError, KeyError, StopIteration):
                     self.send(404, "file not found", "text/plain")
             else:
@@ -319,8 +432,8 @@ def make_handler(dashboard):
                             break
                         self.wfile.write(chunk)
                         left -= len(chunk)
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
+                except CLIENT_DISCONNECTS:
+                    self.close_connection = True
 
         def do_POST(self):
             # Mutations are same-origin JSON requests; the server binds only to loopback.
@@ -340,14 +453,21 @@ def make_handler(dashboard):
                     dashboard.start(body.get("reader"), body.get("n"))
                 elif action == "pause":
                     dashboard.pause()
+                elif action == "rescan":
+                    dashboard.rescan(body.get("reader"))
                 elif action == "scan_more" and dashboard.interactive:
+                    if dashboard.rescanning:
+                        raise ValueError("wait for the metadata rescan to finish")
                     with dashboard.interactive.lock:
                         dashboard.interactive.target += max(0, int(body.get("n", 10)))
                         dashboard.interactive.save()
                     dashboard.interactive.wake.set()
+                    dashboard.ensure_interactive_workers()
                 else:
                     dashboard.change(body.get("reader"), body.get("url"), action, body.get("decision"))
                 self.send(200, "{}")
+            except CLIENT_DISCONNECTS:
+                raise  # the operation may have succeeded; do not attempt another response
             except (ValueError, TypeError, KeyError, OSError) as e:
                 self.send(400, str(e), "text/plain")
 
@@ -357,11 +477,9 @@ def make_handler(dashboard):
 def serve_dashboard(dashboard, port=8765, collect=False):
     with app.LocalServer(("127.0.0.1", port), make_handler(dashboard)) as server:
         print(f"Dashboard: http://127.0.0.1:{server.server_port}/ (Ctrl+C to close)", flush=True)
+        dashboard.serving = True
         if dashboard.interactive:
-            for target in (app.scanner, app.downloader):
-                thread = threading.Thread(target=target, args=(dashboard.interactive,), daemon=True)
-                dashboard.threads.append(thread)
-                thread.start()
+            dashboard.ensure_interactive_workers()
         elif collect:
             dashboard.start()
         try:
@@ -369,6 +487,7 @@ def serve_dashboard(dashboard, port=8765, collect=False):
         except KeyboardInterrupt:
             pass
         finally:
+            dashboard.closing = True
             dashboard.pause()
             if dashboard.interactive:
                 dashboard.interactive.stop.set()

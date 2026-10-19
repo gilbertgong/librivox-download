@@ -47,6 +47,14 @@ class BatchTests(unittest.TestCase):
                     body = json.dumps({"results": f'<h3><a href="https://librivox.org/book-{rid}/">Book</a>'
                                       '<p class="book-meta">Complete | Collaborative | English</p>',
                                       "pagination": ""}).encode()
+                elif self.path.startswith('/api/feed/audiobooks/'):
+                    base = f"http://127.0.0.1:{self.server.server_port}"
+                    books = [{"id": str(rid), "title": "Book", "url_librivox": f"https://librivox.org/book-{rid}/",
+                              "url_text_source": "", "num_sections": "1", "sections": [
+                                  {"section_number": "1", "title": "Chapter", "playtime": "600",
+                                   "listen_url": f"{base}/audio/{rid}_64kb.mp3", "readers": [{"reader_id": str(rid)}]}]}
+                             for rid in (1, 2)]
+                    body = json.dumps({"books": books}).encode()
                 elif self.path.startswith("/book-"):
                     rid = self.path.strip("/").split("-")[-1]
                     base = f"http://127.0.0.1:{self.server.server_port}"
@@ -75,7 +83,7 @@ class BatchTests(unittest.TestCase):
                 if "get_results" in parsed.path:
                     target = "/listing/" + urllib.parse.parse_qs(parsed.query)["primary_key"][0]
                 else:
-                    target = parsed.path
+                    target = parsed.path + ('?' + parsed.query if parsed.query else '')
                 return original(base + target, **kwargs)
 
             with patch.object(app, "get", side_effect=local_get), patch.object(app, "DELAY", 0):
@@ -131,6 +139,8 @@ class BatchTests(unittest.TestCase):
         self.assertEqual([r["status"] for r in summary["results"]], ["completed", "completed"])
         self.assertEqual(summary["results"][0]["name"], "Fixture reader 1")
         self.assertLess(requests.index("/audio/1_128kb.mp3"), requests.index("/listing/2"))
+        self.assertTrue(any('/api/feed/audiobooks/' in url for url in requests))
+        self.assertFalse(any(url.startswith('/book-') for url in requests))
         for job in jobs:
             state = json.loads((Path(job["out"]) / "state.json").read_text())
             d = state["candidates"][0]["download"]

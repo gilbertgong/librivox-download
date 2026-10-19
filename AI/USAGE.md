@@ -147,10 +147,25 @@ making subjective listening decisions or collecting replacements unless the user
 4. Review-only mode has no collection controls. To collect replacements, open the existing batch JSON and use
    its requested totals, or Collect / resume for a reader in an already-open collection dashboard. During an
    active reader's collection, rejected recordings don't count toward its target; a finished reader stays idle.
+   Review also offers an explicit Rescan: select one reader or All readers and click it only when requested.
+   It refreshes metadata from page one, retries skipped checks and preserves downloads/decisions, within the
+   normal candidate target and time budget. It does not download audio or texts. Saved selection settings are
+   required; legacy state without them remains reviewable, but use new configured output for scanning.
 5. Close with Ctrl+C when finished, or leave it available if the user requested an ongoing review session.
 
 Success: the saved records and local audio are browsable and requested decisions persist after reload. Opening
 review mode or clearing a decision starts no scanner/downloader. No separate review database or HTML export exists.
+
+## Rescan / refresh catalog metadata
+
+Use the existing Review Rescan button for the selected reader, or All readers, after ensuring collection is
+idle. It uses the project's API-first lookup with an HTML fallback, while reader discovery still uses the
+website. Monitor reader status and Pause scan if requested. The last scan record distinguishes target reached,
+actual listing exhaustion, timeout, pause and failures. Do not increase scan targets for a catalog survey.
+Downloaded/reviewed recordings retain their chosen section and provenance; refreshed alternatives are available
+in recording details. Unreviewed pending candidates may refresh. No media transfer occurs until a subsequent
+explicit collection request. Do not delete cached audio/texts, clear listening decisions or edit saved filters
+to force a rescan. Ordinary review startup remains offline.
 
 ## Live smoke check
 

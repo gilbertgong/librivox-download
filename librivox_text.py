@@ -38,6 +38,12 @@ def gutenberg_id(url):
     return str(int(m[1])) if m and int(m[1]) > 0 else None
 
 
+def source_record(project_id, url):
+    gid = gutenberg_id(url)
+    return {"project_id": project_id, "url_text_source": url, "gutenberg_id": gid,
+            "gutenberg_url": f"https://www.gutenberg.org/ebooks/{gid}" if gid else None}
+
+
 def source_info(page):
     """The page's Online text link is the API's url_text_source; RSS identifies its project."""
     source = None
@@ -46,9 +52,7 @@ def source_info(page):
             source = html.unescape(href)
             break
     project = re.search(r'https?://(?:www\.)?librivox\.org/rss/(\d+)', page)
-    gid = gutenberg_id(source)
-    return {"project_id": project[1] if project else None, "url_text_source": source,
-            "gutenberg_id": gid, "gutenberg_url": f"https://www.gutenberg.org/ebooks/{gid}" if gid else None}
+    return source_record(project[1] if project else None, source)
 
 
 def cache_path(reader_out, gid):

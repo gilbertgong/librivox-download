@@ -49,9 +49,28 @@ Review mode starts no scanning or downloading and doesn't change state merely by
 are saved back to the existing state files, preserving other metadata. Legacy state without selection settings
 can also be reviewed. Collection controls are unavailable: open the batch JSON to collect replacements.
 
+### Refresh metadata with Rescan
+
+On Review, select a reader and click **Rescan**, or choose All readers to refresh them sequentially. This starts
+from the first reader-list page and rechecks projects, including previous skips/errors. It stops at the normal
+candidate target (usually 20), listing exhaustion, or the reader time budget. Pause scan stops after the current
+check. Use this when catalog information changes or you want to retry earlier checks.
+
+Rescan only refreshes metadata: it does not collect audio or books. Downloaded/reviewed candidates retain their
+chosen section, recordings and decisions; refreshed alternatives are recorded in their details. Unreviewed,
+undownloaded candidates can refresh their section/quality. Previous files and custom metadata are preserved.
+Candidates that are no longer eligible remain visible but are not selected for new transfers. Collection must
+be idle before a rescan. To download newly discovered candidates, use Collect / resume in a collection dashboard.
+
+The button works in review-only mode using saved selection settings, without changing them. Legacy state with
+unknown filters remains reviewable but needs a new configured collection for scanning. Rescan results and errors
+appear under each reader. Ordinary review startup, playback and decisions never start a scan automatically.
+
 Local players use the saved files, with seeking support. Missing files are labeled; source URLs remain available
 as links. There is no generated HTML index or separate review database. The dashboard reconstructs its view from
 saved state, so you can close it and reopen it later. It binds only to this computer's loopback address.
+Cancelled browser connections (for example, during navigation or stopped playback) close quietly rather than
+printing a traceback; other unexpected request-handler errors remain visible in the console.
 
 ## Batch JSON
 
@@ -106,9 +125,10 @@ root, including its shared text cache.
 
 ## Source books
 
-Each candidate records the LibriVox project ID and its **Online text** URL (the API calls this `url_text_source`).
-Recognized Gutenberg links also record the ebook ID and canonical landing-page URL. This reuses the project page
-already fetched for section selection; it does not require a separate API lookup or title matching.
+Each candidate records the LibriVox project ID and `url_text_source` from its API record (the catalog page labels
+this **Online text**). Recognized Gutenberg links also record the ebook ID and canonical landing-page URL.
+The same project-details request supplies sections and source provenance. HTML is a fallback when API details
+are unavailable; older saved candidates can be enriched without changing their selected recording.
 
 Collection downloads the linked whole book as UTF-8 plain text from a
 [Gutenberg-listed mirror](https://www.gutenberg.org/MIRRORS.ALL), following its
@@ -158,6 +178,11 @@ per-reader state is authoritative. Personal `*.local.json` batch files and repor
 ## How recordings are selected
 
 All selection metadata comes from LibriVox; the audio host is contacted only for chosen playback/download URLs.
+The [official API](https://librivox.org/api/info) supplies project sections, reader IDs, durations and source-text
+links. Known project IDs are queried directly; otherwise an exact-title API search is paginated and the catalog
+URL must match before a result is used. Sections are ordered by their section number. Unsupported/incomplete
+API data or request failures fall back to the project page; provenance records the fallback reason. The reader
+listing and reader-name lookup still use the website because the documented API has no reader-search endpoint.
 A project is eligible if a section lists exactly the requested reader and meets the minimum length. Dramatic
 readings, other languages, and pages without individual section readers are skipped. Collaborative books are fine.
 
