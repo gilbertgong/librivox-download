@@ -73,6 +73,11 @@ class Dashboard:
             return None
         return path if path.is_file() else None
 
+    def text_path(self, rid, c):
+        path = app.texts.text_present(self.paths[rid].parent, c)
+        root = (self.paths[rid].parent.parent / "texts" / "gutenberg").resolve()
+        return path if path and path.resolve().is_relative_to(root) else None
+
     def snapshot(self):
         with self.lock:
             ids, results = list(self.paths), copy.deepcopy(self.results)
@@ -89,7 +94,19 @@ class Dashboard:
                     if status == "done" and not present:
                         status = "missing"
                     media = "/media?" + urllib.parse.urlencode({"reader": rid, "url": c["url"]})
-                    candidates.append({**c, "review_status": status, "audio_url": media if present else None})
+                    text_present = self.text_path(rid, c) is not None
+                    text_status = (c.get("text") or {}).get("status", "not checked")
+                    if text_status == "done" and not text_present:
+                        text_status = "missing"
+                    required = c.get("text_required", saved.get("download_texts", False))
+                    reasons = ([] if (d.get("quality") or c["quality"]) == "128" else ["64 kbps"])
+                    if not c["in_range"]:
+                        reasons.append("outside preferred length")
+                    if required and not text_present:
+                        reasons.append("missing text")
+                    candidates.append({**c, "review_status": status, "audio_url": media if present else None,
+                                       "text_status": text_status, "text_url": media.replace("/media?", "/text?") if text_present else None,
+                                       "degraded_reasons": reasons})
                 present = [c for c in candidates if c["audio_url"] and (c.get("download") or {}).get("status") == "done"]
                 result = results.get(rid, {})
                 readers.append({"id": rid, "name": saved.get("reader", f"Reader {rid}"),
@@ -99,12 +116,13 @@ class Dashboard:
                                 "status": result.get("status", saved.get("status", "saved state")),
                                 "detail": result.get("detail", ""), "downloaded": len(present),
                                 "usable": sum(c.get("decision") != "reject" for c in present),
+                                "premium": sum(c.get("decision") != "reject" and not c["degraded_reasons"] for c in present),
                                 "rejected": sum(c.get("decision") == "reject" for c in candidates),
                                 "kept": sum(c.get("decision") == "keep" for c in candidates),
                                 "candidates": candidates, "checked": saved.get("checked", {}), "state": saved})
             except (OSError, ValueError, KeyError, TypeError) as e:
                 readers.append({"id": rid, "name": rid, "status": "state error", "detail": str(e),
-                                "target": 0, "downloaded": 0, "usable": 0, "rejected": 0, "kept": 0,
+                                "target": 0, "downloaded": 0, "usable": 0, "premium": 0, "rejected": 0, "kept": 0,
                                 "candidates": [], "checked": {}, "state": {}})
         return {"mode": "interactive" if self.interactive else "batch" if self.jobs else "review",
                 "running": self.interactive.collecting if self.interactive else running,
@@ -138,6 +156,8 @@ class Dashboard:
                     st.want_downloads = count
                 elif not st.want_downloads:
                     st.want_downloads = st.args.count
+                if not st.collecting:
+                    st.reset_text_attempts()
                 st.collecting = True
                 st.save()
             st.wake.set()
@@ -248,16 +268,19 @@ def make_handler(dashboard):
                 self.send(200, json.dumps(dashboard.snapshot(), ensure_ascii=False))
             elif parsed.path == "/api/state" and dashboard.interactive:
                 self.send(200, dashboard.interactive.snapshot())
-            elif parsed.path == "/media":
+            elif parsed.path in ("/media", "/text"):
                 try:
                     rid, url = query["reader"][0], query["url"][0]
                     c = next(c for c in dashboard.read(rid)["candidates"] if c["url"] == url)
-                    path = dashboard.audio_path(rid, c)
+                    path = dashboard.text_path(rid, c) if parsed.path == "/text" else dashboard.audio_path(rid, c)
                     if path is None:
-                        raise ValueError("audio not present")
-                    self.media(path)
+                        raise ValueError("file not present")
+                    if parsed.path == "/text":
+                        self.send(200, path.read_bytes(), "text/plain; charset=utf-8")
+                    else:
+                        self.media(path)
                 except (OSError, ValueError, KeyError, StopIteration):
-                    self.send(404, "audio not found", "text/plain")
+                    self.send(404, "file not found", "text/plain")
             else:
                 self.send(404, "not found", "text/plain")
 

@@ -2,7 +2,7 @@
 
 Collect a LibriVox reader's solo recordings, one sample per project, and review them in a local dashboard.
 Give it a JSON list of readers to collect sequentially, then listen and mark recordings to keep or reject.
-Python 3.12, standard library only.
+Source books download by default when a recording links to Project Gutenberg. Python 3.12, standard library only.
 
 ## Collect a batch
 
@@ -20,21 +20,23 @@ The dry run validates and prints resolved jobs without writing output or contact
 
 ## Two dashboard pages
 
-- **Overview:** reader progress, current activity/errors, requested totals, downloaded/available/rejected counts,
-  and total downloaded duration per reader (hours:minutes:seconds, using saved LibriVox section lengths).
-  Duration includes files marked bad and excludes missing files. The page also provides collection controls
+- **Overview:** reader names with smaller reader IDs below linking to their LibriVox pages, current activity/errors, and compact columns for
+  Goal, Files, Duration, Premium and Bad. Files counts completed downloads still present, including bad files.
+  Premium counts preferred recordings; Bad counts all rejected candidates, including ones not downloaded.
+  Duration uses saved LibriVox section lengths, shown as hours:minutes:seconds. It includes files marked bad
+  and excludes missing files. The page also provides collection controls
   and links to review all recordings or one reader. Collect / resume starts another pass for all readers or the
   selected reader. Pause collection stops after the current operation, keeping its progress.
-- **Review:** all saved candidates grouped by reader/project, local audio players, section lengths and qualities,
+- **Review:** all saved candidates grouped by reader, with downloaded recordings first and pending/other
+  undownloaded candidates below them. Each project has local audio players, section lengths and qualities,
   source links, download statuses/errors, and Keep / Mark bad / Clear decision. Filter by reader, download status
   or decision. Expand skipped projects for reasons, recording details for individual metadata, and saved state
   details for everything else in `state.json`. Polling doesn't replace audio players while you're listening.
 
-Mark bad records the existing rejection decision; it never deletes the audio. Available means a completed file
-exists and isn't rejected, not that someone has listened and approved it. During active collection, rejected
+Mark bad records the existing rejection decision; it never deletes the audio. During active collection, rejected
 files don't count toward the target. Once a reader finishes, marking something bad **does not restart collection**.
 Use Collect / resume explicitly to fill the target with replacements. The last collection result and the current
-available count are shown separately.
+file and premium counts are shown separately. Summary cards show readers, downloaded files and premium recordings.
 
 ## Reopen for review
 
@@ -54,7 +56,10 @@ saved state, so you can close it and reopen it later. It binds only to this comp
 ## Batch JSON
 
 The file has an optional `defaults` object, an `output_root`, and a nonempty `readers` list. Readers can be plain
-URLs, integer reader IDs, or digit strings. Use an object with `url` or `reader_id` to override a setting or
+URLs, integer reader IDs, or digit strings. An optional `_ignore` field at the top level, in `defaults`, or in
+a reader object can hold any JSON value (notes, parked settings, or unused reader lists); its contents are
+ignored and never included in resolved jobs. It does not disable the reader object containing it.
+Use an object with `url` or `reader_id` to override a setting or
 supply a custom `name`. These forms can mix:
 
 ```json
@@ -79,12 +84,14 @@ identity always uses the reader ID. Replace the sample URLs in the example file 
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `count` | 10 | total non-rejected completed recordings per reader, including earlier downloads |
+| `count` | 10 | preferred number of premium recordings per reader; degraded fallbacks fill shortages after listing exhaustion |
 | `language` | `English` | project language; empty string permits any |
 | `range_minutes` | `[5, 15]` | preferred section length; closest eligible section is a backup |
 | `min_seconds` | 60 | minimum section length |
 | `order` | `alpha` | listing order: `alpha` or `catalog_date` |
 | `timeout_minutes` | 60 | per-reader budget, checked between operations |
+| `download_texts` | `true` | download linked Gutenberg books and treat missing text as degraded; `false` selects audio only |
+| `text_mirror` | `https://gutenberg.pglaf.org` | mirror root serving generated UTF-8 files under `cache/epub/ID/pgID.txt` |
 
 `output_root` defaults to `downloads` **relative to the JSON file**, independent of the working directory.
 Each reader gets `<output_root>/<reader_id>/state.json` and project audio subdirectories. Reader IDs stay stable
@@ -94,7 +101,35 @@ Run the same batch again or use Collect / resume to continue. Failed transfers r
 invocation/pass; failures aren't retried indefinitely. Existing files and listening decisions are preserved.
 Collection requires state with the same reader and recorded selection settings. Older state with unknown
 filters, or changed language/range/minimum/order, requires a new output root; existing data remains reviewable.
-Count and time budget may change on resumption. Do not run two processes against the same output directory.
+Count, time budget and text settings may change on resumption. Do not run two processes against the same output
+root, including its shared text cache.
+
+## Source books
+
+Each candidate records the LibriVox project ID and its **Online text** URL (the API calls this `url_text_source`).
+Recognized Gutenberg links also record the ebook ID and canonical landing-page URL. This reuses the project page
+already fetched for section selection; it does not require a separate API lookup or title matching.
+
+Collection downloads the linked whole book as UTF-8 plain text from a
+[Gutenberg-listed mirror](https://www.gutenberg.org/MIRRORS.ALL), following its
+[automated-download guidance](https://www.gutenberg.org/policy/robot_access.html). It uses the mirror's generated
+text path directly, without a Gutendex dependency or requests to the main Gutenberg website. Mirror requests
+are spaced at least two seconds apart. Alternate `text_mirror` values must serve that same directory layout;
+redirects to the main website are refused.
+
+Books are cached once under `<output_root>/texts/gutenberg/<id>/source.txt`, shared across readers/projects.
+The original bytes and Gutenberg header/footer remain intact. `source.json` records the actual download URL,
+retrieval time, byte count and SHA-256 checksum; candidate state links the recording to this cache. Review cards
+show the source link, text status and **Open local text**. Keep the shared `texts` directory when moving a collection.
+
+Missing links, non-Gutenberg sources and failed downloads remain explicit statuses and make the recording
+degraded when text downloads are enabled. They do not stop audio collection. Failed/missing text gets one new
+attempt per candidate on a later collection pass, while valid cached books are reused. Existing completed audio
+can gain source metadata/text on resumption without being downloaded again. Review-only mode does none of this
+network work and does not rewrite state merely because a cached text has gone missing.
+
+This retrieves **whole source books**, not chapter transcripts or aligned passages. It does not clean the text,
+extract chapters or establish that every spoken word matches the downloaded edition.
 
 ## Headless collection
 
@@ -111,6 +146,8 @@ Each reader reports `completed`,
 results allow the next reader to proceed. Exit status is 0 if all targets are met, 1 for incomplete/failed
 readers, 2 for invalid configuration, or 130 for interruption. These outcome codes apply to headless mode;
 closing a dashboard normally returns 0, and collection outcomes remain on its Overview page.
+The summary includes `premium` and `degraded` counts. A completed reader can include degraded fallbacks when
+the listing has been exhausted; its detail field says so.
 
 An operation already in progress may finish after a pause request or time budget. Existing connection/read
 timeouts govern in-flight network operations. Ctrl+C requests a stop and waits for the current operation;
@@ -125,10 +162,12 @@ A project is eligible if a section lists exactly the requested reader and meets 
 readings, other languages, and pages without individual section readers are skipped. Collaborative books are fine.
 
 Each project offers the first section in the preferred range, otherwise the closest eligible section. In-range
-128 kbps candidates are prime; other candidates are backups. Collection prefers primes and uses backups only
+128 kbps candidates with downloaded source text are premium (called prime internally); other candidates are
+backups. Disabling text downloads removes the text requirement. Collection prefers premiums and uses backups only
 after the listing is exhausted. A 128 kbps transfer failure makes a candidate eligible for 64 kbps fallback.
-Keep is a listening annotation, not a download prerequisite. No transcripts are downloaded or listening judgments
-made automatically.
+Keep is a listening annotation, not a download prerequisite. Listening judgments are never made automatically.
+Resuming with degraded downloads searches for premium replacements, preserving earlier files and decisions;
+the downloaded count can exceed the target. Completed collections stay idle until explicitly resumed.
 
 ## Ad hoc single-reader use
 
@@ -150,6 +189,8 @@ Retry 128 kbps after a failed preview, and Scan 10 more. Completed recordings pl
 | `--order` | alpha | `alpha` or `catalog_date` |
 | `--language` | English | empty string permits any |
 | `--port` | 8765 | loopback dashboard port |
+| `--no-download-texts` | off | disable source downloads and the text preference |
+| `--text-mirror` | `https://gutenberg.pglaf.org` | Gutenberg mirror root, as in batch mode |
 
 Queued individual requests and unfinished collection targets survive restarts. Transfers restart from the
 beginning of their `.part` file rather than resuming byte offsets. Use a new output directory for a different

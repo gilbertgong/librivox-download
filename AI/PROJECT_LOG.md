@@ -276,3 +276,65 @@ pending and failed downloads are excluded. This uses existing snapshot fields in
 decoding, new dependencies or backend changes; refreshing the page updates an already running dashboard.
 README and plan updated. JavaScript syntax and focused calculation checks pass for empty collections,
 rejected/missing/failed files, rounding, absent duration metadata and totals over 24 hours. No collection launched.
+
+## 2026-10-18: source books and premium replacement
+
+The user requested source provenance and accompanying Gutenberg texts, enabled by default, with missing text
+considered degraded like 64 kbps audio. Capture the LibriVox project ID and Online text URL from the section
+page already fetched; normalize Gutenberg links without title matching or an extra API request. The new
+librivox_text module downloads original whole-book UTF-8 bytes through a Gutenberg-listed mirror, spaces
+requests, refuses main-site redirects and caches by Gutenberg ID across readers/projects. Record the actual
+URL, retrieval time, byte count and SHA-256 alongside the text, preserving its header/footer. Gutendex timed
+out during investigation; verified the listed mirror's generated text path directly, avoiding that dependency.
+
+Batch download_texts defaults true and text_mirror is configurable; the single-reader CLI offers
+--no-download-texts and --text-mirror. Text settings can change when resuming existing selection state.
+Premium means preferred length, 128 kbps and downloaded source text when enabled. Unknown text is provisional
+until checked; known degraded candidates wait until listing exhaustion. Resume enriches completed recordings
+without another audio transfer and searches for premium replacements while keeping earlier audio and review
+decisions. Counts may exceed the target. Missing/failed text gets one retry per candidate per collection pass,
+including explicit single-reader resumption; failures do not prevent fallback audio. Summaries expose premium
+and degraded counts, with a completed-fallback explanation. Pause/shutdown are checked between text and audio.
+Review shows source/local-text links, statuses and separate degradation reasons; Overview adds premium counts.
+Review-only state/cache inspection does not fetch or rewrite anything. Source books are not chapter transcripts
+or validated audio/text alignments.
+
+Validation: 61 offline tests pass, covering source/legacy URL capture, defaults/overrides, mirror retrieval,
+shared cache and provenance, corrupt-cache preservation, invalid payloads/forbidden redirects, premium selection,
+exhausted fallbacks, later text recovery, legacy enrichment, replacement without deletion, audio-only mode,
+read-only local text serving/missing detection/path containment, explicit single-reader retries, review decisions
+during text I/O and pause boundaries. Dashboard JavaScript syntax passes. A separate live one-book smoke check
+successfully downloaded and reused the cached original text; browser checks confirmed premium counts, source
+and local-text links, and missing-text explanations with no console errors. The temporary review server was
+stopped. Existing user collections/configs and research jobs were not modified.
+
+## 2026-10-18: compact Overview reader table
+
+The user requested reader IDs under resolved names and more space for the reader column. Added smaller ID
+labels, widened the name column, shortened Target/Downloaded/Marked bad to Goal/Files/Bad, and removed the
+redundant Available column. Summary cards now show Readers, Downloaded files and Premium recordings. Numeric
+columns stay compact; the collection action column is absent in review-only mode. Files includes completed
+local downloads marked bad; Bad includes all rejected candidates, even undownloaded ones. Counts and selection
+logic are unchanged. README and plan updated. JavaScript syntax and a browser layout/console check passed
+against an isolated review fixture; no user state was edited. The temporary review server was stopped.
+
+## 2026-10-18: reader profile links
+
+Linked the smaller Overview Reader ID labels to the corresponding LibriVox reader pages, opening in a new
+tab. Name links still open local Review. Updated README/plan; dashboard JavaScript syntax check passes.
+
+## 2026-10-18: downloaded-first Review ordering
+
+Review now shows completed recordings with present local audio first within each reader, followed by pending
+and other undownloaded candidates. Rejected downloaded files stay in the downloaded group. Initial rendering
+uses a stable sorted copy; later status changes use CSS ordering without detaching audio elements or changing
+saved state. README/plan updated. JavaScript syntax/ordering checks and a browser check with deliberately
+reversed fixture data passed, with no console errors. The isolated read-only server was stopped.
+
+## 2026-10-18: ignored batch metadata
+
+Batch JSON now accepts _ignore at the top level, in defaults and in reader objects. Any JSON value is allowed;
+its contents are neither interpreted nor included in resolved jobs. Other unknown fields still fail validation.
+The field does not disable its containing reader. README/plan updated. All 62 offline tests pass, including a
+regression proving ignored nested settings/invalid reader data leave resolved jobs unchanged. No active downloader
+was found before editing; no collection or user state changed.

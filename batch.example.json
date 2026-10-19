@@ -2,6 +2,7 @@
   "defaults": {
     "count": 10,
     "language": "English",
+    "download_texts": true,
     "range_minutes": [5, 15],
     "timeout_minutes": 60
   },

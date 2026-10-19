@@ -21,7 +21,7 @@ class DashboardTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="librivox-dashboard-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.job = {**batch.DEFAULTS, "count": 1, "name": "Test reader", "reader_id": "1",
+        self.job = {**batch.DEFAULTS, "download_texts": False, "count": 1, "name": "Test reader", "reader_id": "1",
                     "url": "https://librivox.org/reader/1/", "out": str(self.root / "1")}
         self.st = app.State(batch.reader_args(self.job), "1", Path(self.job["out"]))
         self.c = candidate()

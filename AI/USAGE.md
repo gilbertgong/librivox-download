@@ -31,7 +31,7 @@ Prerequisite: setup above. This task is offline and does not download source rec
 
 1. From the repo root run `python -B -m unittest discover -s tests -v`.
 2. The tests create and clean their own temporary output, serve local HTTP fixtures on automatically allocated
-   ports, and do not contact LibriVox or the audio host. They need temporary-directory access and loopback sockets.
+   ports, and do not contact LibriVox, Gutenberg mirrors or the audio host. They need temporary-directory access and loopback sockets.
 3. Report the result. If execution restrictions block temporary files or sockets, distinguish that from a test
    assertion failure and use the environment's normal approval mechanism if needed.
 
@@ -57,13 +57,16 @@ A request to start the tool leaves it running for the user; a bounded test stops
 
 ## Download sources / download recordings
 
-Here, sources means the selected reader's recordings, not models or a separate source-code checkout.
+Here, sources means the selected reader's recordings and their linked Gutenberg books, not models or a separate source-code checkout.
 Prerequisites: find samples above; the user's requested count or individual selection; enough disk space and
-internet access to the audio host. This request includes setup and scanning if they have not already happened.
+internet access to LibriVox, the audio host and the configured Gutenberg mirror. This request includes setup
+and scanning if they have not already happened.
 
 1. For new multi-reader requests, prefer the batch task below. In single-reader mode, use Download on a Review
    card or set N and use Collect / resume on Overview. The collection target means N total
-   non-rejected completed samples in this output, including earlier downloads; it is not N additional samples.
+   premium non-rejected samples in this output, including earlier downloads; it is not N additional samples.
+   Premium means preferred length, 128 kbps and downloaded source text when enabled. The tool accepts degraded
+   fallbacks after listing exhaustion. Replacements preserve older recordings, so the saved count can exceed N.
 2. Watch transfer status. An individual 128 kbps failure automatically tries 64 without another click. Bulk
    downloading favors primes and waits until scanning finishes before using backups.
 3. Check that completed records point to actual files under the output directory. A failed or missing status is
@@ -91,8 +94,12 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
    lookup failures fall back to Reader ID without blocking collection and retry on a later invocation. Dry runs
    remain offline with placeholder labels. Reader IDs identify directories. Don't invent names or listening decisions.
 2. Confirm the count is a total number of recordings per reader, not additional recordings or a duration target.
-   The tool takes one section per project. State the existing 64 kbps fallback policy if it matters to the request;
-   strict 128-only collection and automatic transcript collection are not supported by this batch schema.
+   The tool takes one section per project and seeks that many premium recordings before settling for degraded
+   fallbacks. download_texts defaults true: linked whole Gutenberg books download from a listed mirror into the
+   shared texts/gutenberg cache. Missing text, 64 kbps or outside-range length makes a candidate degraded.
+   Set download_texts false only for audio-only requests; this also removes text-based degradation. The tool
+   retrieves whole books, not exact chapter transcripts or aligned passages. text_mirror can select another
+   mirror with the same generated UTF-8 layout; never substitute the main Gutenberg website.
 3. Set `output_root` explicitly if the user chose a destination. Relative paths are relative to the JSON file.
    If operating under a role with read-only repository access, place both JSON and output outside the repo and
    invoke Python with `-B`. Respect that role's authorization boundaries for data collection.
@@ -106,10 +113,13 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
    Only headless mode guarantees a JSON-only stdout summary; progress remains on stderr. To save that summary,
    redirect stdout to a separate report, never the input JSON or a state file. No custom wrapper is needed.
 6. Inspect each reader's dashboard outcome or the headless exit status/summary, then check saved file paths. Report completed,
-   insufficient and failed readers separately. A failed reader does not stop subsequent readers. Time budgets
+   insufficient and failed readers separately, including premium/degraded totals and fallback details. A failed reader does not stop subsequent readers. Time budgets
    are checked between operations, so allow an in-flight request to finish or hit its network timeout.
 7. Rerun the same JSON to resume interrupted work or make another attempt at failed transfers. Changing count or
-   timeout is allowed; changing selection filters requires a new output root. Older saved state without recorded
+   timeout or text settings is allowed; changing selection filters requires a new output root. Missing text
+   retries once per candidate per pass, and completed audio may gain text without another audio transfer.
+   Preserve the shared texts directory alongside reader directories when moving a collection.
+   Older saved state without recorded
    selection settings is also refused. Preserve it and choose new output, rather than editing away the check.
 
 Success: all requested targets are met with files present, or a precise partial/failure report explains which

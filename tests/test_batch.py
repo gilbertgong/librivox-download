@@ -21,7 +21,7 @@ class BatchTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.path = self.root / "collection.json"
-        self.manifest = {"defaults": {"count": 1}, "output_root": "audio",
+        self.manifest = {"defaults": {"count": 1, "download_texts": False}, "output_root": "audio",
                          "readers": [{"name": "First reader", "url": "https://librivox.org/reader/1/"},
                                      {"name": "Second reader", "url": "https://librivox.org/reader/2/"}]}
 
@@ -94,6 +94,15 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(jobs[1]["range_minutes"], [3, 12])
         self.assertEqual(Path(jobs[0]["out"]), self.root / "audio" / "1")
         self.assertFalse((self.root / "audio").exists())
+
+    def test_ignore_metadata_does_not_change_jobs_or_validate_its_contents(self):
+        expected = self.jobs()
+        self.manifest['_ignore'] = {'readers': [False, {'url': 'invalid'}]}
+        self.manifest['defaults']['_ignore'] = {'count': 0}
+        self.manifest['readers'][0]['_ignore'] = ['notes', {'url': 'invalid'}]
+        self.manifest['readers'][1]['_ignore'] = None
+        self.assertEqual(self.jobs(), expected)
+        self.assertFalse((self.root / 'audio').exists())
 
     def test_invalid_manifests_are_rejected_without_output(self):
         variants = []

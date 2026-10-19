@@ -14,12 +14,13 @@ that range. Its file is the 128 kbps one, judged by name (`*_128kb.mp3`). A 64 k
 only when a section has no 128 kbps name, or an attempt to play or download it fails. Such failures can be
 temporary; the page offers a way to retry 128 kbps.
 
-A candidate is prime if its section is in the length range and has a 128 kbps file; otherwise (only 64 kbps, or
-no section in range) it's a backup: shown in its own section below the prime ones, not counted toward the goal.
+A candidate is premium (prime internally) if its section is in the length range, has a 128 kbps file and has
+downloaded source text when enabled. Other candidates are degraded backups with visible reasons on Review.
+Source books download by default through a Gutenberg mirror, shared under <out>/../texts/gutenberg/<id>.
 Scanning continues until there are --projects prime candidates that haven't been rejected (or N, if "Download N"
 asks for more), so rejecting one makes the scan look further. On the page you can listen, keep, reject, download
-one, or "download N": the server downloads, in the background, the first N candidates not rejected, prime first;
-a backup is taken only once the listing is exhausted and no prime candidate is left.
+one, or collect N: the server seeks N premium downloads, accepting backups only after listing exhaustion.
+Explicit resume seeks premium replacements for degraded recordings, preserving earlier files and decisions.
 
 Everything lives in <out> (default downloads/<name>): one folder per downloaded project with its MP3, and
 state.json, the single record of what's been checked, decided (keep / reject) and downloaded, with the time of each
@@ -37,6 +38,8 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+import librivox_text as texts
 
 USER_AGENT = "librivox-download (personal research)"
 DELAY = 0.5  # seconds between LibriVox page requests
@@ -110,6 +113,7 @@ def file_urls(link, play):
 def read_project(url):
     """The project page's sections: [{title, readers, seconds, url128, url64}]."""
     page = get(url)
+    source = texts.source_info(page)
     table = re.search(r'<table class="chapter-download">(.*?)</table>', page, re.S)
     sections = []
     for row in re.findall(r"<tr>(.*?)</tr>", table.group(1) if table else "", re.S):
@@ -120,6 +124,7 @@ def read_project(url):
         time_ = re.findall(r"<td>\s*(\d+:\d\d(?::\d\d)?)\s*</td>", row)
         url128, url64 = file_urls(link.group(1), play.group(1) if play else None)
         sections.append({
+            "source": source,
             "title": html.unescape(re.sub(r"<[^>]+>", "", link.group(2))).strip(),
             "readers": sorted(set(re.findall(r"librivox\.org/reader/(\d+)", row))),
             "seconds": hms(time_[-1]) if time_ else None,
@@ -153,6 +158,7 @@ def check(project, rid, args):
         return None, f"no solo section of at least {args.min_seconds:g} s with a file"
     section, in_range = pick_section(solo, args.range[0] * 60, args.range[1] * 60)
     return {**project, "sections_total": len(sections), "solo_sections": len(solo),
+            "source": section.get("source", {}),
             "section": {k: section[k] for k in ("title", "seconds", "url128", "url64")},
             "in_range": in_range, "quality": "128" if section["url128"] else "64",
             "found_at": now(), "decision": None, "decided_at": None, "download": None}, None
@@ -193,8 +199,13 @@ def slug(text):
 # ---------------------------------------------------------------- shared state
 
 def is_prime(c):
-    """A candidate that counts toward the goal: a section in the length range, with a 128 kbps file."""
-    return c["quality"] == "128" and c["in_range"]
+    """Unchecked text is provisional for selection; completed audio must have text to be premium."""
+    text = c.get("text") or {}
+    text_ok = (not c.get("text_required", False) or text.get("status") == "done" or
+               ((c.get("download") or {}).get("status") != "done" and
+                (not text or c.get("text_retry_pending"))))
+    quality = (c.get("download") or {}).get("quality", c["quality"])
+    return quality == "128" and c["in_range"] and text_ok
 
 
 class State:
@@ -217,6 +228,7 @@ class State:
         self.candidates = []
         self.extra = {}
         self.updated_at = now()
+        self.text_attempted = set()  # retry each candidate at most once per collection pass
         if self.path.exists():
             saved = json.loads(self.path.read_text(encoding="utf-8"))
             self.extra = saved
@@ -235,7 +247,12 @@ class State:
                         c["download"] = None  # the saved bulk target selects it again, prime first
             if self.reconcile_downloads():
                 self.save()
-            self.collecting = self.want_downloads > 0 and self.downloaded() < self.want_downloads
+        for c in self.candidates:
+            c["text_required"] = getattr(args, "download_texts", True)
+            if (c.get("text") or {}).get("status") == "done" and not texts.text_present(self.out, c):
+                c["text"] = {**c["text"], "status": "missing", "reason": "Cached source text is missing"}
+        self.reset_text_attempts()
+        self.collecting = self.want_downloads > 0 and not self.collection_satisfied()
 
     def record(self):
         """Full state record, with unknown saved metadata preserved. Called with the lock held."""
@@ -243,6 +260,7 @@ class State:
                 "want_downloads": self.want_downloads, "queue": self.queue,
                 "status": self.status, "page": self.page,
                 "selection": selection_options(self.args),
+                "download_texts": getattr(self.args, "download_texts", True),
                 "checked": self.checked, "candidates": self.candidates}
 
     def save(self):
@@ -267,6 +285,25 @@ class State:
         return sum(bool(c["download"]) and c["download"]["status"] == "done" and c["decision"] != "reject"
                    for c in self.candidates)
 
+    def premium_downloaded(self):
+        return sum(bool(c["download"]) and c["download"]["status"] == "done" and
+                   c["decision"] != "reject" and is_prime(c) for c in self.candidates)
+
+    def collection_satisfied(self):
+        if any(c.get("text_required") and c["decision"] != "reject" and
+               (c.get("download") or {}).get("status") == "done" and
+               c["url"] not in self.text_attempted and not texts.text_present(self.out, c)
+               for c in self.candidates):
+            return False  # give existing audio one text retry, even if fallbacks already fill the target
+        return (self.premium_downloaded() >= self.want_downloads or
+                (self.scan_done and self.downloaded() >= self.want_downloads))
+
+    def reset_text_attempts(self):
+        self.text_attempted.clear()
+        for c in self.candidates:
+            if c.get("text_required") and not texts.text_present(self.out, c):
+                c["text_retry_pending"] = True
+
     def reconcile_downloads(self):
         """Keep completion honest without removing the saved path, timestamp or decisions. Lock held."""
         changed = False
@@ -274,6 +311,9 @@ class State:
             d = c["download"]
             if d and d["status"] == "done" and not (self.out / d["file"]).is_file():
                 d.update(status="missing", error="Downloaded file is missing; download again to restore it.")
+                changed = True
+            if (c.get("text") or {}).get("status") == "done" and not texts.text_present(self.out, c):
+                c["text"] = {**c["text"], "status": "missing", "reason": "Cached source text is missing"}
                 changed = True
         return changed
 
@@ -332,6 +372,7 @@ def scan_project(st, p):
     with st.lock:
         st.checked[p["url"]] = {"title": p["title"], "type": p["type"], "reason": reason}
         if not reason:
+            cand["text_required"] = getattr(st.args, "download_texts", True)
             st.candidates.append(cand)
         st.save()
     st.wake.set()
@@ -376,7 +417,7 @@ def next_download(st):
         if c and c["decision"] != "reject" and not (c["download"] and c["download"]["status"] == "done"):
             return c
         st.queue.pop(0)
-    if st.downloaded() >= st.want_downloads:
+    if st.collection_satisfied():
         return None
     pending = [c for c in st.candidates if c["decision"] != "reject" and
                (not c["download"] or c["download"]["status"] == "missing")]
@@ -388,12 +429,49 @@ def next_download(st):
     return pending[0] if pending else None
 
 
-def download_next(st):
+def prepare_text(st, c):
+    """No state lock during I/O; only attach provenance/text, preserving live review decisions."""
+    source = c.get("source") or {}
+    if not source or not source.get("project_id"):
+        try:
+            source = texts.source_info(get(c["url"]))  # enrich legacy candidates without changing selection
+        except Exception as e:
+            result = {"status": "failed", "reason": f"Source lookup failed: {e}"}
+        else:
+            result = texts.fetch_book(source, st.out, getattr(st.args, "text_mirror", texts.DEFAULT_MIRROR))
+    else:
+        result = texts.fetch_book(source, st.out, getattr(st.args, "text_mirror", texts.DEFAULT_MIRROR))
+    with st.lock:
+        c["source"], c["text"] = source, result
+        c.pop("text_retry_pending", None)
+        st.text_attempted.add(c["url"])
+        st.save()
+    st.wake.set()
+
+
+def download_next(st, cancelled=None):
     """Perform one transfer. Return False when idle; the worker waits between attempts."""
+    with st.lock:
+        st.reconcile_downloads()
+        existing = next((c for c in st.candidates if c.get("text_required") and c["decision"] != "reject"
+                         and (c.get("download") or {}).get("status") == "done"
+                         and c["url"] not in st.text_attempted and not texts.text_present(st.out, c)), None)
+    if existing:
+        prepare_text(st, existing)
+        return True
     with st.lock:
         c = next_download(st)
         if not c:
             return False
+        needs_text = c.get("text_required") and c["url"] not in st.text_attempted
+    if needs_text:
+        prepare_text(st, c)
+        with st.lock:
+            if c["decision"] == "reject" or (not is_prime(c) and c["url"] not in st.queue and not st.scan_done):
+                return True  # keep searching before downloading a known backup
+    with st.lock:
+        if c["decision"] == "reject" or st.stop.is_set() or (cancelled and cancelled(c)):
+            return True
         quality = c["quality"]  # playback controls may change the candidate during the transfer
         individual = c["url"] in st.queue
         c["download"] = {"status": "downloading", "individual": individual, "at": now()}
@@ -429,10 +507,11 @@ def download_next(st):
 def downloader(st):
     while not st.stop.is_set():
         with st.lock:
-            if st.collecting and st.downloaded() >= st.want_downloads:
+            st.reconcile_downloads()
+            if st.collecting and st.collection_satisfied():
                 st.collecting = False
             working = st.collecting or bool(st.queue)
-        if not working or not download_next(st):
+        if not working or not download_next(st, cancelled=lambda c: not st.collecting and c["url"] not in st.queue):
             st.wake.wait(2)
             st.wake.clear()
 
@@ -469,7 +548,14 @@ def main():
     ap.add_argument("--order", choices=["alpha", "catalog_date"], default="alpha", help="listing order")
     ap.add_argument("--language", default="English", help="only projects in this language ('' for any)")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--no-download-texts", dest="download_texts", action="store_false",
+                    help="audio-only collection; do not prefer recordings with source text")
+    ap.add_argument("--text-mirror", default=texts.DEFAULT_MIRROR, help="Gutenberg mirror with generated UTF-8 files")
     args = ap.parse_args()
+    try:
+        texts.validate_mirror(args.text_mirror)
+    except ValueError as e:
+        ap.error(str(e))
 
     rid = reader_id(args.url)
     st = State(args, rid, Path(args.out or Path(__file__).parent / "downloads" / slug(args.name)))

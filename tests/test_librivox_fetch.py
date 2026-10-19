@@ -44,7 +44,7 @@ class DownloadTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.out = Path(self.temp.name)
         self.args = SimpleNamespace(name="Test reader", url="https://librivox.org/reader/1/",
-                                    projects=20, count=10, range=[5, 15])
+                                    projects=20, count=10, range=[5, 15], download_texts=False)
         self.st = app.State(self.args, "1", self.out)
         self.c = candidate()
         self.st.candidates = [self.c]

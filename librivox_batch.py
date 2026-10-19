@@ -23,7 +23,8 @@ import librivox_fetch as app
 
 
 DEFAULTS = {"count": 10, "language": "English", "range_minutes": [5, 15],
-            "min_seconds": 60, "order": "alpha", "timeout_minutes": 60}
+            "min_seconds": 60, "order": "alpha", "timeout_minutes": 60,
+            "download_texts": True, "text_mirror": app.texts.DEFAULT_MIRROR}
 
 
 def positive(value, label, integer=False):
@@ -43,11 +44,12 @@ def load_batch(path):
     """Validate the whole manifest before any writes or network requests. Paths are manifest-relative."""
     path = Path(path).resolve()
     data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or set(data) - {"defaults", "output_root", "readers"}:
-        raise ValueError("batch must be an object with defaults, output_root and readers fields only")
+    if not isinstance(data, dict) or set(data) - {"defaults", "output_root", "readers", "_ignore"}:
+        raise ValueError("batch accepts only defaults, output_root, readers and _ignore fields")
     defaults = data.get("defaults", {})
-    if not isinstance(defaults, dict) or set(defaults) - DEFAULTS.keys():
-        raise ValueError(f"defaults accepts only: {', '.join(DEFAULTS)}")
+    if not isinstance(defaults, dict) or set(defaults) - (DEFAULTS.keys() | {"_ignore"}):
+        raise ValueError(f"defaults accepts only: {', '.join(DEFAULTS)}, _ignore")
+    defaults = {k: v for k, v in defaults.items() if k != "_ignore"}
     output = data.get("output_root", "downloads")
     if not isinstance(output, str) or not output.strip():
         raise ValueError("output_root must be a nonempty path string")
@@ -61,7 +63,7 @@ def load_batch(path):
         if isinstance(reader, (str, int)) and not isinstance(reader, bool):
             is_id = isinstance(reader, int) or bool(re.fullmatch(r"[0-9]+", reader.strip()))
             reader = {"reader_id" if is_id else "url": reader}
-        if not isinstance(reader, dict) or set(reader) - (DEFAULTS.keys() | {"name", "url", "reader_id"}):
+        if not isinstance(reader, dict) or set(reader) - (DEFAULTS.keys() | {"name", "url", "reader_id", "_ignore"}):
             raise ValueError(f"{label}: unknown fields or invalid reader object")
         rid = normalize_reader_id(reader["reader_id"], label) if "reader_id" in reader else None
         if "url" in reader:
@@ -84,6 +86,9 @@ def load_batch(path):
         seen.add(rid)
         options = DEFAULTS | defaults | {k: v for k, v in reader.items() if k in DEFAULTS}
         positive(options["count"], f"{label} count", integer=True)
+        if not isinstance(options["download_texts"], bool):
+            raise ValueError(f"{label}: download_texts must be true or false")
+        options["text_mirror"] = app.texts.validate_mirror(options["text_mirror"])
         for key in ("min_seconds", "timeout_minutes"):
             positive(options[key], f"{label} {key}")
         bounds = options["range_minutes"]
@@ -107,6 +112,7 @@ def load_batch(path):
 def reader_args(job):
     return SimpleNamespace(name=job["name"], url=job["url"], count=job["count"],
                            projects=max(20, job["count"]), range=job["range_minutes"],
+                           download_texts=job["download_texts"], text_mirror=job["text_mirror"],
                            min_seconds=job["min_seconds"], language=job["language"], order=job["order"])
 
 
@@ -171,8 +177,9 @@ class DownloadProgress:
         self.width = 0
         self.last = None
 
-    def update(self, job, count):
-        message = f"{job['name']}: {count}/{job['count']} downloaded"
+    def update(self, job, count, premium=None):
+        message = (f"{job['name']}: {count}/{job['count']} downloaded" if premium is None else
+                   f"{job['name']}: {premium}/{job['count']} premium, {count} downloaded")
         if message == self.last:
             return
         self.last = message
@@ -217,15 +224,17 @@ def run_reader(job, on_state=None, stop=None, state_factory=None):
                 break
             with st.lock:
                 st.reconcile_downloads()
-                if st.downloaded() >= job["count"]:
+                if st.collection_satisfied():
                     status = "completed"
+                    if st.premium_downloaded() < job["count"]:
+                        detail = "listing exhausted; target filled with degraded fallbacks"
                     break
             if time.monotonic() >= deadline:
                 detail = "reader time budget exceeded"
                 break
-            if app.download_next(st):
+            if app.download_next(st, cancelled=(lambda c: stop.is_set()) if stop else None):
                 with st.lock:
-                    progress.update(job, st.downloaded())
+                    progress.update(job, st.downloaded(), st.premium_downloaded())
                 continue
             if st.scan_done:
                 with st.lock:
@@ -254,7 +263,9 @@ def run_reader(job, on_state=None, stop=None, state_factory=None):
             st.status = status
             st.save()
             downloaded = st.downloaded()
-    return reader_result(job, status, downloaded, detail)
+            premium = st.premium_downloaded()
+    return {**reader_result(job, status, downloaded, detail), "premium": premium,
+            "degraded": downloaded - premium}
 
 
 def run_batch(jobs, on_state=None, on_result=None, stop=None, state_factory=None):
