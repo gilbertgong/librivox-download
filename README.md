@@ -1,7 +1,7 @@
 # librivox-download
 
 Collect a LibriVox reader's solo recordings, one sample per project, and review them in a local dashboard.
-Give it a JSON list of readers to collect sequentially, then listen and mark recordings to keep or reject.
+Give it a JSON list of readers to collect samples sequentially, or browse and download complete projects for listening.
 Source books download by default when a recording links to Project Gutenberg. Python 3.12, standard library only.
 
 ## Launch the dashboard
@@ -16,7 +16,8 @@ This uses `session.local.json` in the current working directory, creating it wit
 another filename, such as `python -B librivox_launch.py manual.local.json`, to use a separate session; a
 missing named file is also created. Its parent directory must already exist. Existing files are preserved,
 and invalid JSON is reported rather than replaced. Dry runs and headless runs require an existing valid file.
-The default filename is ignored by Git, as are other `*.local.json` files.
+The default filename is ignored by Git, as are other `*.local.json` files. Dashboard startup prints the full
+settings-file path; newly created files also print their initial `{}` contents.
 
 Overview opens with **Add a reader**: enter a reader URL or ID and a collection goal. The dashboard saves it
 in that JSON file. Follow the reader's name to **Review**, where the controls above their recordings let you:
@@ -50,7 +51,7 @@ Open the printed address (default http://127.0.0.1:8765/). Collection starts aut
 open after all readers finish; Ctrl+C closes it. Use `--port 8766` if another instance uses the default port.
 The dry run validates and prints resolved jobs without writing output or contacting remote services.
 
-## Two dashboard pages
+## Three dashboard pages
 
 - **Overview:** reader names with smaller reader IDs below linking to their LibriVox pages, current activity/errors, and compact columns for
   Goal, Files, Duration, Premium and Bad. Files counts completed downloads still present, including bad files.
@@ -66,10 +67,54 @@ The dry run validates and prints resolved jobs without writing output or contact
   details for everything else in `state.json`. Per-reader manual controls sit above the recordings when opened
   with a JSON file. Polling doesn't replace audio players or reset an edited Total while you're listening.
 
-Mark bad records the existing rejection decision; it never deletes the audio. During active collection, rejected
+- **Projects:** whole-book browsing, section players and project downloads. Scan a reader's complete listing
+  or open a project URL, with optional dramatic readings and title/author search.
+
+For reader samples, Mark bad records the existing rejection decision; it never deletes the audio. During active collection, rejected
 files don't count toward the target. Once a reader finishes, marking something bad **does not restart collection**.
 Use Collect / resume explicitly to fill the target with replacements. The last collection result and the current
 file and premium counts are shown separately. Summary cards show readers, downloaded files and premium recordings.
+
+## Browse and download projects
+
+Open **Projects** in a JSON session. Enter a reader URL or ID and choose **Scan all projects**, or enter a
+catalog project URL and **Open project**. A project card shows authors, language, type, sections, duration
+and downloaded count when the source metadata supplies them. Opening a URL puts that project first and
+scrolls it into view on the current page. Click a project name for a focused modal with its sections and
+download controls; Close or Escape returns to the list. A smaller LibriVox page link sits underneath the name.
+Expand its section list to preview audio;
+completed sections use local players. Search by title or author.
+
+**Include dramatic readings** is off by default. Scanning records excluded dramatic projects without loading
+their sections. Enable the checkbox, then scan the reader again or use **Load / refresh details** on a project
+to load those sections. Disabling it hides cached dramatic projects without deleting anything. Ordinary reader
+sampling continues to exclude dramatic readings and require solo sections.
+
+Project scanning covers the reader's entire listing, with every language and section length, rather than the
+sampling candidate target. It is an explicit network operation and downloads no audio or books. Progress saves
+between projects; Pause stops after the current operation. The reader's configured time budget applies, or
+60 minutes for an unconfigured reader. Repeat a scan to reuse successful cached metadata and retry failures;
+use Load / refresh details to refresh a successfully loaded project. This browses readers' projects, not the
+entire LibriVox catalog. Reader scans here do not add or alter sampling jobs in the JSON session.
+
+Choose **Download entire project**, or select a credited reader and **Download reader's sections**. The latter
+includes shared cast sections crediting that reader. Downloads run sequentially, prefer 128 kbps and fall back
+to 64 kbps after failure. Repeat the same request to resume or retry: completed files still present are reused,
+missing files are restored, and failed sections receive another attempt. Pause and interrupted requests keep
+their progress but never restart automatically when you reopen the dashboard.
+
+Project downloads save separately under `<output_root>/projects/<project-key>/`, with one file per section.
+`<output_root>/projects/catalog.json` records metadata, scans, section credits, requests and transfer results;
+project keys are derived from catalog URLs, so projects discovered through several readers share one copy.
+Sample `state.json` files and recordings are independent. Metadata refresh preserves downloads; if the audio
+list has changed, the saved selection is retained and the revised list recorded for inspection. Use another
+output root for that revised edition. Existing audio is never deleted.
+
+Source-book downloads follow the session defaults (or the configured reader's overrides for reader-scoped
+requests) and share the existing Gutenberg cache. Missing text is reported but does not prevent whole-project
+audio downloads. Metadata comes from the official API with an HTML fallback; unavailable author/type/credit
+information is shown as unknown rather than invented. Opening the output root with `--review` also shows its
+saved Projects library and local players, with scanning and download controls unavailable.
 
 ## Reopen for review
 

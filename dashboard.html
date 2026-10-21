@@ -11,8 +11,11 @@ header{background:var(--card);border-bottom:1px solid var(--line)}.header,main{m
 .reader-table .reader-cell{width:46%;min-width:230px;overflow-wrap:anywhere}.reader-table .status-cell{width:18%;max-width:180px;overflow-wrap:anywhere}.reader-table .metric{width:1%;white-space:nowrap;font-variant-numeric:tabular-nums}.reader-table .collection-action{width:1%}.reader-table .collection-action button{min-width:100px}
 .records{display:flex;flex-direction:column;gap:16px;margin:16px 0}.records>.record{margin:0}
 @media(max-width:700px){.header,main{padding:16px}.header{gap:12px}.mode{width:100%;margin:0}.stats{gap:8px}.stat{padding:12px}.stat strong{font-size:24px}.filters{align-items:stretch}.filters label{flex:1}.filters select{width:100%;min-width:130px}.audio-row audio{flex-basis:100%;order:-1}h1{font-size:25px}.panel{padding:12px}td,th{padding:10px 7px}}
+#project-dialog{width:min(1000px,calc(100vw - 32px));max-height:90vh;padding:0 20px 20px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text)}
+#project-dialog::backdrop{background:rgba(0,0,0,.5)}.dialog-toolbar{position:sticky;top:0;z-index:1;padding:14px 0;background:var(--bg)}
+button.project-title{border:0;padding:0;color:var(--blue);font:inherit;font-weight:inherit;text-align:left;background:none}button.project-title:hover{text-decoration:underline}.project-info h2{margin-bottom:3px}.project-source{display:block;margin-bottom:12px;font-size:12px}
 </style>
-<header><div class="header"><div class="brand">LibriVox collection</div><nav aria-label="Main navigation"><a href="/" id="overview-link">Overview</a><a href="/review" id="review-link">Review</a></nav><span class="mode muted" id="mode"></span></div></header>
+<header><div class="header"><div class="brand">LibriVox collection</div><nav aria-label="Main navigation"><a href="/" id="overview-link">Overview</a><a href="/review" id="review-link">Review</a><a href="/projects" id="projects-link">Projects</a></nav><span class="mode muted" id="mode"></span></div></header>
 <main>
 <p id="error" class="error" role="alert" hidden></p>
 <section id="overview">
@@ -29,7 +32,16 @@ header{background:var(--card);border-bottom:1px solid var(--line)}.header,main{m
   <div class="toolbar"><button id="rescan" title="Refresh metadata for the selected reader, or all readers">Rescan</button><button id="pause-scan" hidden>Pause scan</button><span id="scan-status" class="muted" role="status"></span></div>
   <div id="groups"></div><p class="empty" id="no-recordings" hidden>No recordings match these filters. Saved state and skipped projects remain available below each reader.</p>
 </section>
+<section id="projects-page" hidden>
+  <h1>Projects</h1><p class="muted">Browse complete books, listen to sections, and download an entire project or one reader's contributions, including shared casts. Sampling filters do not apply here.</p>
+  <div class="panel" id="project-entry"><form id="project-scan-form" class="toolbar"><label>Reader URL or ID <input id="project-reader" list="project-readers" required placeholder="Reader ID or LibriVox reader URL" style="width:min(370px,65vw)"></label><datalist id="project-readers"></datalist><button id="project-scan">Scan all projects</button></form><p class="muted">Scans this reader's full listing, with no language, length or candidate-count filter. Scans save progress; repeat to reuse cached details and retry failures.</p><form id="project-open-form" class="toolbar"><label>Project URL <input id="project-url" type="url" required placeholder="https://librivox.org/book-title/" style="width:min(450px,65vw)"></label><button id="project-open">Open project</button></form></div>
+  <div class="panel toolbar"><label><input id="project-dramatic" type="checkbox"> Include dramatic readings</label><label>Search <input id="project-search" type="search" placeholder="Title or author"></label><span class="spacer"></span><span id="project-count" class="muted"></span><button id="project-pause" hidden>Pause</button></div>
+  <p class="muted" id="project-dramatic-help">After enabling dramatic readings, scan the reader again or load an individual project's details to include previously excluded entries.</p>
+  <p id="project-activity" role="status"></p><div id="project-scans" class="muted"></div><p id="project-output" class="muted path"></p>
+  <div id="project-books"></div><p id="project-empty" class="empty">No projects yet. Scan a reader or open a project URL above.</p>
+</section>
 </main>
+<dialog id="project-dialog" aria-label="Project details"><div class="toolbar dialog-toolbar"><strong>Project details</strong><span class="spacer"></span><button id="project-dialog-pause" hidden>Pause</button><button id="project-dialog-close" autofocus>Close</button></div><p id="project-dialog-error" class="error" role="alert" hidden></p><div id="project-dialog-body"></div></dialog>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -39,12 +51,12 @@ function downloadedDuration(reader){
  return `${Math.floor(seconds/3600)}:${String(Math.floor(seconds/60)%60).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
 }
 const params=new URLSearchParams(location.search);
-const reviewing=location.pathname==='/review';
-$('overview').hidden=reviewing;$('review').hidden=!reviewing;
-$(reviewing?'review-link':'overview-link').classList.add('active');
+const reviewing=location.pathname==='/review',projecting=location.pathname==='/projects';
+$('overview').hidden=reviewing||projecting;$('review').hidden=!reviewing;$('projects-page').hidden=!projecting;
+$(projecting?'projects-link':reviewing?'review-link':'overview-link').classList.add('active');
 const cards=new Map(),groups=new Map();let data=null,readerOptions='',first=true;
-function error(message){$('error').textContent=message;$('error').hidden=!message;}
-async function post(action,body={}){try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error(await r.text());error('');await refresh();}catch(e){error(e.message);}}
+function error(message){for(const id of ['error','project-dialog-error']){$(id).textContent=message;$(id).hidden=!message;}}
+async function post(action,body={}){try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error(await r.text());error('');await refresh();return true;}catch(e){error(e.message);return false;}}
 $('collect').onclick=()=>post('start',data.mode==='interactive'?{n:Number($('count').value)}:{});
 $('add-reader').onsubmit=e=>{e.preventDefault();post('add_reader',{value:$('reader-entry').value,n:Number($('new-count').value)});};
 $('pause').onclick=()=>post('pause');$('scan-more').onclick=()=>post('scan_more',{n:10});
@@ -96,8 +108,53 @@ function renderReview(){if(!data)return;
  for(const[key,k]of cards)if(!presentKeys.has(key)){k.el.remove();cards.delete(key);}
  $('showing').textContent=`${shown} of ${total} candidates`;$('no-recordings').hidden=shown>0;
 }
+let projectData=null,projectInitialized=false,focusedProject=null,promotedProjectPath=null,pendingProjectPath=null;const projectCards=new Map();
+const duration=seconds=>`${Math.floor(seconds/3600)}:${String(Math.floor(seconds/60)%60).padStart(2,'0')}:${String(Math.round(seconds)%60).padStart(2,'0')}`;
+const projectOptions=()=>({include_dramatic:$('project-dramatic').checked});
+$('project-scan-form').onsubmit=e=>{e.preventDefault();post('project_scan',{value:$('project-reader').value,...projectOptions()});};
+$('project-open-form').onsubmit=async e=>{e.preventDefault();const url=$('project-url').value;if(await post('project_open',{url,...projectOptions()})){promotedProjectPath=pendingProjectPath=projectPath(url);$('project-search').value='';renderProjects();}};
+$('project-pause').onclick=()=>post('pause');
+$('project-dramatic').onchange=()=>{renderProjects();if(data.can_projects)post('project_options',projectOptions());};
+$('project-search').oninput=()=>renderProjects();
+function projectClick(e){const focus=e.target.closest('button[data-project-focus]');if(focus){focusProject(focus.dataset.projectFocus);return;}const button=e.target.closest('button[data-project-action]');if(!button)return;const card=button.closest('article');if(button.dataset.projectAction==='open')post('project_open',{url:card.dataset.url,...projectOptions()});else{const body={project:card.dataset.project,...projectOptions()};if(button.dataset.projectAction==='reader')body.reader=card.querySelector('.project-reader-choice').value;post('project_download',body);}}
+$('project-books').onclick=projectClick;$('project-dialog-body').onclick=projectClick;
+const projectPath=url=>new URL(url,location.origin).pathname.replace(/\/+$/,'');
+function focusProject(key){for(const audio of document.querySelectorAll('audio'))audio.pause();focusedProject=key;renderProjects();if(!$('project-dialog').open)$('project-dialog').showModal();}
+$('project-dialog-close').onclick=()=>$('project-dialog').close();$('project-dialog-pause').onclick=()=>post('pause');
+$('project-dialog').addEventListener('close',()=>{const card=projectCards.get('focus:'+focusedProject);if(card){for(const audio of card.el.querySelectorAll('audio'))audio.pause();card.el.remove();projectCards.delete('focus:'+focusedProject);}const key=focusedProject;focusedProject=null;projectCards.get(key)?.el.querySelector('.project-title')?.focus();});
+$('project-dialog').addEventListener('click',e=>{if(e.target!==$('project-dialog'))return;const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();});
+async function refreshProjects(){const r=await fetch('/api/projects');if(!r.ok)throw Error('Could not load project library');projectData=await r.json();if(!projectInitialized){$('project-dramatic').checked=!!projectData.include_dramatic;projectInitialized=true;if(params.get('reader'))$('project-reader').value=params.get('reader');}renderProjects();}
+function renderProjects(){if(!projectData||!data)return;
+ const manage=data.can_projects,include=$('project-dramatic').checked,search=$('project-search').value.trim().toLowerCase();
+ $('project-entry').hidden=!manage;$('project-dramatic').disabled=data.running;$('project-scan').disabled=data.running;$('project-open').disabled=data.running;$('project-pause').hidden=!data.running;$('project-pause').disabled=data.pausing;
+ $('project-readers').innerHTML=data.readers.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+ const activity=projectData.activity||{};$('project-activity').textContent=data.running?(data.pausing?'Pausing after the current operation…':activity.status==='running'?activity.detail:'Another collection operation is running'):activity.status==='failed'?'Failed: '+activity.detail:'';
+ $('project-scans').textContent=Object.entries(projectData.scans||{}).map(([rid,scan])=>`Reader ${rid}: ${scan.status} · ${scan.checked} projects checked · ${scan.detail}`).join(' | ');
+ $('project-output').textContent=projectData.out||'';let shown=0;
+ const entries=Object.entries(projectData.projects).sort((a,b)=>Number(projectPath(b[1].url)===promotedProjectPath)-Number(projectPath(a[1].url)===promotedProjectPath));
+ entries.forEach(([key,p],index)=>{const card=renderProjectCard(key,p,$('project-books'),key);if(!card.el.hidden)shown++;const next=$('project-books').children[index];if(next!==card.el)$('project-books').insertBefore(card.el,next||null);if(pendingProjectPath===projectPath(p.url)&&!card.el.hidden){pendingProjectPath=null;card.el.scrollIntoView({block:'start',behavior:'smooth'});}});
+ if(focusedProject&&projectData.projects[focusedProject])renderProjectCard(focusedProject,projectData.projects[focusedProject],$('project-dialog-body'),'focus:'+focusedProject,true);
+ $('project-dialog-pause').hidden=!data.running;$('project-dialog-pause').disabled=data.pausing;
+ $('project-count').textContent=`${shown} of ${Object.keys(projectData.projects).length} projects`;$('project-empty').hidden=shown>0;$('project-empty').textContent=Object.keys(projectData.projects).length?'No projects match these filters.':'No projects yet. Scan a reader or open a project URL above.';
+}
+function renderProjectCard(key,p,container,cacheKey,focused=false){
+ const manage=data.can_projects,include=$('project-dramatic').checked,search=$('project-search').value.trim().toLowerCase();
+  let card=projectCards.get(cacheKey);if(!card){const el=document.createElement('article');el.className='panel';el.dataset.project=key;el.dataset.url=p.url;el.innerHTML='<div class="project-info"></div><div class="toolbar project-actions"></div><details class="project-sections"><summary></summary><div class="section-list"></div></details>';container.append(el);card={el,info:'',actions:'',rows:new Map()};projectCards.set(cacheKey,card);el.querySelector('details').addEventListener('toggle',()=>{if(el.querySelector('details').open)renderProjects();});if(focused)el.querySelector('details').open=true;}
+  card.el.hidden=!focused&&((!include&&p.type==='Dramatic')||!!search&&!`${p.title} ${(p.authors||[]).join(' ')}`.toLowerCase().includes(search));
+  const sections=p.sections||[],request=p.download_request||{},readerIds=[...new Set(sections.flatMap(s=>s.readers))];
+  const info=`<h2 style="margin-top:0">${focused?esc(p.title||p.url):`<button class="project-title" data-project-focus="${esc(key)}">${esc(p.title||p.url)}</button>`}</h2><small class="project-source"><a href="${safeLink(p.url)}" target="_blank" rel="noopener">LibriVox page ↗</a></small><p class="muted">${esc((p.authors||[]).join(', ')||'Author unavailable')} · ${esc(p.language||'Unknown language')} · ${esc(p.type||'Unknown type')} · ${sections.length} sections · ${duration(p.seconds||0)} · ${p.downloaded||0} downloaded</p>`+(p.error?`<p class="error">${esc(p.error)}</p>`:'')+(p.metadata_note?`<p class="muted">${esc(p.metadata_note)}</p>`:'')+(p.metadata_status==='excluded'?'<p class="muted">Dramatic reading: details were excluded. Enable dramatic readings and load details.</p>':'')+(request.status?`<p class="muted">Download: ${esc(request.status)} · ${request.reader?'Reader '+esc(request.reader)+' sections':'Entire project'} (${request.sections.length} sections)</p>`:'')+(p.source?.url_text_source?`<p><a href="${safeLink(p.source.url_text_source)}" target="_blank" rel="noopener">Source text</a>${p.text?' · Text: '+esc(p.text.status):''}${p.text_url?` · <a href="${esc(p.text_url)}" target="_blank" rel="noopener">Open local text</a>`:''}</p>`:'');
+  if(info!==card.info){card.el.querySelector('.project-info').innerHTML=info;card.info=info;}
+  const actions=manage?`<button data-project-action="open" ${data.running?'disabled':''}>Load / refresh details</button>`+(p.metadata_status==='ready'?`<button class="primary" data-project-action="all" ${data.running?'disabled':''}>Download entire project</button>`+(readerIds.length?`<select class="project-reader-choice" aria-label="Reader for ${esc(p.title)}">${readerIds.map(rid=>`<option value="${esc(rid)}">${esc(p.reader_names?.[rid]||'Reader '+rid)} (${esc(rid)})</option>`).join('')}</select><button data-project-action="reader" ${data.running?'disabled':''}>Download reader's sections</button>`:''):''):'';
+  if(actions!==card.actions){const selected=card.el.querySelector('select')?.value||(focused?projectCards.get(key)?.el.querySelector('select')?.value:null);card.el.querySelector('.project-actions').innerHTML=actions;if(selected&&readerIds.includes(selected))card.el.querySelector('select').value=selected;card.actions=actions;}
+  card.el.querySelector('summary').textContent=`Sections (${sections.length}) · expand to listen`;
+  if(card.el.querySelector('details').open){const keys=new Set();for(const section of sections){keys.add(section.number);let row=card.rows.get(section.number);if(!row){const el=document.createElement('div');el.className='record';el.innerHTML='<div class="section-info"></div><audio controls preload="none" style="width:100%;margin-top:10px"></audio>';card.el.querySelector('.section-list').append(el);row={el,info:'',src:null};card.rows.set(section.number,row);}
+    const text=`<strong>${section.number}. ${esc(section.title)}</strong><div class="muted">${duration(section.seconds||0)} · ${esc(section.status)}${section.download?.quality?' · '+esc(section.download.quality)+' kbps':''} · ${section.readers.map(rid=>`<a href="https://librivox.org/reader/${encodeURIComponent(rid)}/" target="_blank" rel="noopener">${esc(p.reader_names?.[rid]||'Reader '+rid)}</a>`).join(', ')||'Reader credits unavailable'}${section.audio_url?' · Local audio':manage?' · Source preview':''}</div>`+(section.download?.error?`<div class="muted">${esc(section.download.error)}</div>`:'');if(text!==row.info){row.el.querySelector('.section-info').innerHTML=text;row.info=text;}
+    const src=section.audio_url||(manage?(section.url128||section.url64):null),audio=row.el.querySelector('audio');audio.hidden=!src;if(src!==row.src){if(src)audio.src=src;else audio.removeAttribute('src');row.src=src;}
+   }for(const [number,row]of card.rows)if(!keys.has(number)){row.el.remove();card.rows.delete(number);}}
+ return card;
+}
 let refreshing=false;
-async function refresh(){if(refreshing)return;refreshing=true;try{const response=await fetch('/api/dashboard');if(!response.ok)throw Error('Could not load saved state');data=await response.json();renderOverview();renderReview();first=false;if($('error').dataset.connection==='true'){error('');$('error').dataset.connection='false';}}catch(e){error(e.message);$('error').dataset.connection='true';}finally{refreshing=false;}}
+async function refresh(){if(refreshing)return;refreshing=true;try{const response=await fetch('/api/dashboard');if(!response.ok)throw Error('Could not load saved state');data=await response.json();renderOverview();renderReview();if(projecting)await refreshProjects();first=false;if($('error').dataset.connection==='true'){error('');$('error').dataset.connection='false';}}catch(e){error(e.message);$('error').dataset.connection='true';}finally{refreshing=false;}}
 refresh();setInterval(refresh,2000);
 </script>
 </html>

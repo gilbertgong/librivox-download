@@ -20,14 +20,14 @@ def project_key(url):
     return ((p.hostname or "").removeprefix("www.").lower(), p.path.rstrip("/"))
 
 
-def project(get, url, project_id=None, title=None):
+def project(get, url, project_id=None, title=None, fields=None):
     """Resolve an exact project URL, never choose a recording solely by its book title."""
     if not project_id and not title:
         raise LookupError("Need a project ID or title for API lookup")
     offset = 0
     while True:
         params = {"format": "json", "extended": 1, "limit": PAGE_SIZE,
-                  "fields": "{id,title,url_librivox,url_text_source,num_sections,sections}"}
+                  "fields": fields or "{id,title,url_librivox,url_text_source,num_sections,sections}"}
         if project_id:
             params["id"] = project_id
         else:

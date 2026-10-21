@@ -427,3 +427,52 @@ Dry-run and headless commands keep their existing no-creation behavior and requi
 Validation: 95 offline tests pass on Python 3.12 and 3.14. Added checks for no-argument/default startup,
 explicit missing-file creation, reopening without overwriting settings, invalid-file preservation and no
 session creation from dry-run/headless/review. Checks use temporary directories, not user configurations.
+
+
+## 2026-10-20 — Listener-oriented project library
+
+User authorized a small listener workflow alongside reader sampling: full reader project discovery, direct
+project URLs, whole-project downloads and an optional Include dramatic readings checkbox. Added Projects as
+a third dashboard page, with title/author search, API author/language/genre/reader metadata, total duration,
+section credit lists and source/local players. Details prefer the official extended audiobooks API with exact
+URL identity, retaining HTML fallback. Reader display names come from display_name. No global catalog crawl.
+
+Project scans explicitly traverse a reader's full listing with no sample cap/language/length/solo filter;
+configured timeout or60minutes, Pause and cached progress bound the work. Dramatic listings are recorded but
+their details skipped by default. Enable the checkbox and rescan or load details to include them; hiding
+cached projects never deletes them. This does not alter sampling rules or add sampling jobs. Downloads choose
+an entire project or sections crediting a selected reader (including shared casts), reuse completed files,
+restore missing files, retry failures explicitly and fall back128to64. Save progress before network work.
+One dashboard worker serializes project operations with sampling. Whole-project state lives separately in
+output_root/projects/catalog.json and URL-derived project directories; source books share the text cache,
+and missing text does not block a requested whole book. No project work resumes automatically on startup.
+Read-only output review can browse the cached project library/local players, with no project mutation controls.
+
+Metadata refresh preserves completed section records. If the audio list changes, retain the selected list
+and provenance, record the new alternative and explain using fresh output for that revised edition; existing
+files cannot silently become downloads attributed to different URLs. Interrupted requests display as such on
+reopen without rewriting state. Section lists render only when expanded, preserving player elements during
+polling. Launcher startup now prints the absolute settings JSON path; creation also prints the initial {}.
+
+Validation: 110 offline tests pass on Python3.12 and3.14, including15 project-library tests plus launcher
+output assertions. JavaScript syntax and diff checks pass. A bounded live lookup of known project52 validated
+full section metadata/authors/display names from the API, with no media downloads. Synthetic browser checks
+verified reader scan, dramatic reveal/load, direct URL lookup, reader-scoped solo/shared downloads, completing
+a whole project while reusing saved sections, and local playback without errors. Existing user sessions,
+recordings, settings and running dashboard were not used as fixtures or restarted. Restart loads the new page.
+
+
+## 2026-10-20 — Opened-project ordering and focused project view
+
+The user found newly opened projects at the bottom and wanted names to focus on a project rather than
+navigate away. Successful URL opens now promote that project to the top of the current results and scroll
+it into view when metadata arrives. Project title buttons open a native modal containing only that project's
+metadata, download controls and section players; the external LibriVox link is smaller underneath. Shared
+card rendering keeps controls consistent in both views. Polling preserves modal players and section expansion.
+Close/Escape returns focus to the project name and stops modal playback; opening a modal pauses other players.
+The modal also exposes Pause and operation errors while the rest of the page is inactive.
+
+Validation: browser checks with synthetic local metadata/audio confirmed new/existing URL promotion, focused
+content, working reader-scoped downloads and live status inside the modal, Escape/Close and restored focus.
+No browser console errors. JavaScript syntax and all110 offline tests pass. Documentation updated; no data
+migration, backend selection change or new real-world downloads. Reload the dashboard page for these UI changes.

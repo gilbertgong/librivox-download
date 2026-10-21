@@ -337,7 +337,7 @@ def main():
             try:
                 with args.batch.open("x", encoding="utf-8", newline="\n") as session:
                     session.write("{}\n")
-                print(f"Created session: {args.batch.resolve()}", flush=True)
+                print(f"Created session: {args.batch.resolve()}\n{{}}", flush=True)
             except FileExistsError:
                 pass  # existing files, including invalid/empty ones, must never be overwritten
         jobs = load_batch(args.batch)
@@ -348,6 +348,7 @@ def main():
         return 0
     if not args.headless:
         from librivox_dashboard import Dashboard, serve_dashboard
+        print(f"Session settings: {args.batch.resolve()}", flush=True)
         data = json.loads(args.batch.read_text(encoding="utf-8"))
         serve_dashboard(Dashboard(jobs=jobs, manifest=args.batch), args.port,
                         collect=bool(jobs) and data.get("auto_collect", True) and not args.browse)

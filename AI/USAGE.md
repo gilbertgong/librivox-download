@@ -193,3 +193,38 @@ unfinished bulk target remain saved. In a manual session, explicitly resume coll
 files appear as missing and can be downloaded again, automatically if needed by an active bulk target.
 If files were deliberately moved, explain why the original output no longer counts them; do not move them
 back, delete them, or reset the user's decisions without a request. No manual JSON editing is normally needed.
+
+
+## Browse projects / download a whole book
+
+Prerequisites: setup, a JSON session with writable output_root, the user's reader URL/ID or project URL, and
+internet access when scanning/previewing/downloading. Check for an existing dashboard first. Launch with
+--browse to avoid starting configured sample collection. Startup prints the settings-file path; creating a
+missing session also prints its initial {} contents. Do not replace an existing configuration.
+
+1. Open Projects. Scan all projects accepts a reader URL/ID without adding a sampling job. Open project accepts
+   a LibriVox catalog URL. Full reader scans are explicitly requested operations, not a prerequisite for ordinary
+   sample collection. They include all languages/lengths, with normal per-reader time budget, and no sample cap.
+2. Include dramatic readings defaults false. Enable it only when the requested scope includes those projects.
+   Repeat the reader scan or load a project's details to fetch previously excluded sections. Disabling hides
+   cached projects and keeps files. Sample filtering remains unchanged.
+3. Opening a project URL moves it to the top of the current page and scrolls it into view. Click a project
+   name for a focused modal with players and download controls; Close or Escape returns to the list. The small
+   LibriVox page link opens the external catalog. Inspect the title/edition, authors, reader credits and sections.
+   Whole-project requests include everyone;
+   reader-scoped requests include sections where that reader is one of the credits, including shared casts.
+   Get the user's intended download scope rather than treating whole-book and sample collection as interchangeable.
+4. Use Download entire project or choose a reader and Download reader's sections. Project/audio/text state lives
+   under output_root/projects/catalog.json, with URL-derived project directories and the shared Gutenberg cache.
+   No sample state or decisions are modified. Missing text is nonfatal; failed transfers stay visible.
+5. Pause stops between operations. Repeat the same download request to reuse completed sections and retry failed
+   or missing ones. Reopening never resumes project work automatically. Interrupted intent remains visible.
+   Loading output_root with --review shows cached metadata/local audio only, without project write controls.
+6. Report downloaded versus requested sections and any failures/fallbacks. Do not infer that a reader narrated
+   an entire collaborative book, remove old recordings, or survey the global catalog. A changed catalog audio
+   list keeps previously selected/downloaded sections and records the new alternative; use fresh output to
+   download that revised edition rather than rewriting the existing recording's provenance.
+
+Success: the intended project/scope is recorded, chosen sections exist locally and play through the dashboard,
+or a precise partial outcome explains failed/paused sections. Source books follow configured text preferences;
+there is no alignment, conversion or packaging step. Ordinary page startup does not make network requests.

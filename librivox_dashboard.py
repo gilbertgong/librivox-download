@@ -1,4 +1,4 @@
-"""Shared two-page collection/review dashboard. State files remain the only review database."""
+"""Collection, sampling review and project library dashboard, backed by local JSON state."""
 import copy
 import json
 import mimetypes
@@ -10,15 +10,21 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import librivox_fetch as app
+import librivox_projects as projects
 
 CLIENT_DISCONNECTS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
 
 class Dashboard:
-    def __init__(self, jobs=(), paths=None, interactive=None, manifest=None):
+    def __init__(self, jobs=(), paths=None, interactive=None, manifest=None, project_root=None):
         self.manifest = Path(manifest).resolve() if manifest else None
         self.manifest_data = json.loads(self.manifest.read_text(encoding="utf-8")) if manifest else None
         self.jobs = {job["reader_id"]: job for job in jobs}
+        if self.manifest:
+            project_root = (self.manifest.parent / self.manifest_data.get("output_root", "downloads")).resolve()
+        elif self.jobs:
+            project_root = Path(next(iter(self.jobs.values()))["out"]).parent
+        self.projects = projects.Library(project_root) if project_root is not None else None
         self.paths = {rid: Path(job["out"]) / "state.json" for rid, job in self.jobs.items()}
         self.paths.update(paths or {})
         self.states = {}
@@ -27,6 +33,7 @@ class Dashboard:
         self.stop = threading.Event()
         self.worker = None
         self.running = False
+        self.project_running = False
         self.rescanning = False
         self.serving = False
         self.closing = False
@@ -58,7 +65,8 @@ class Dashboard:
             if rid in paths:
                 raise ValueError(f"duplicate reader {rid}; open its reader directory separately")
             paths[rid] = path
-        return cls(paths=paths)
+        project_root = root.parent.parent if root.is_file() else root.parent if (root / "state.json").is_file() else root
+        return cls(paths=paths, project_root=project_root)
 
     def read(self, rid):
         with self.lock:
@@ -140,7 +148,74 @@ class Dashboard:
                 "rescanning": self.rescanning, "can_rescan": bool(self.paths),
                 "pausing": running and self.stop.is_set(),
                 "can_add": bool(self.manifest),
+                "can_projects": bool(self.projects and (self.manifest or self.jobs)),
                 "can_collect": bool(self.jobs or self.interactive), "readers": readers}
+
+    def project_action(self, action, body):
+        """Use the same operation slot as sampling; never run two collection writers at once."""
+        import librivox_launch as launch
+        with self.lock:
+            if not self.projects or not (self.manifest or self.jobs):
+                raise ValueError("open a JSON session to scan or download projects")
+            if self.running:
+                raise ValueError("pause the current operation and wait for it to stop")
+            include = body.get("include_dramatic", self.projects.data.get("include_dramatic", False))
+            if not isinstance(include, bool):
+                raise ValueError("include_dramatic must be true or false")
+            if action == "project_options":
+                self.projects.options(include)
+                return
+            if action == "project_scan":
+                job = launch.load_batch(self.manifest or Path("session.json"), {"readers": [body.get("value")]})[0]
+                rid = job["reader_id"]
+                timeout = self.jobs.get(rid, {}).get("timeout_minutes", 60)
+                operation = lambda: self.projects.scan(rid, self.stop, include, timeout)
+                label = f"Scanning all projects for reader {rid}"
+            elif action == "project_open":
+                seed = {"url": projects.project_url(body.get("url"))}
+                operation = lambda: self.projects.inspect(seed, include=include, refresh=True)
+                label = "Loading project details"
+            elif action == "project_download":
+                key = body.get("project")
+                with self.projects.lock:
+                    project = self.projects.data["projects"][key]
+                    if project.get("metadata_status") != "ready":
+                        raise ValueError("load project details first")
+                    rid = launch.normalize_reader_id(body["reader"], "reader") if body.get("reader") is not None else None
+                    if rid and not any(rid in section["readers"] for section in project["sections"]):
+                        raise ValueError("reader is not credited on any section")
+                defaults = launch.DEFAULTS | (self.manifest_data or {}).get("defaults", {})
+                if rid in self.jobs:
+                    defaults.update({key: self.jobs[rid][key] for key in ("download_texts", "text_mirror")})
+                operation = lambda: self.projects.download(key, rid, self.stop, defaults["download_texts"], defaults["text_mirror"])
+                label = f"Downloading {project['title']}" + (f" · reader {rid}" if rid else " · entire project")
+            else:
+                raise ValueError("unknown project action")
+            self.projects.options(include)
+            self.running = True
+            self.project_running = True
+            self.stop.clear()
+            with self.projects.lock:
+                self.projects.data["activity"] = {"status": "running", "detail": label}
+                self.projects.save()
+
+            def work():
+                status, detail = "idle", label
+                try:
+                    operation()
+                    if self.stop.is_set():
+                        status = "paused"
+                except Exception as error:
+                    status, detail = "failed", str(error)
+                finally:
+                    with self.projects.lock:
+                        self.projects.data["activity"] = {"status": status, "detail": detail}
+                        self.projects.save()
+                    with self.lock:
+                        self.running = False
+                        self.project_running = False
+            self.worker = threading.Thread(target=work, daemon=True)
+            self.worker.start()
 
     def save_manifest(self, data):
         """Validate before replacing; don't overwrite edits made outside this dashboard."""
@@ -487,10 +562,25 @@ def make_handler(dashboard):
         def do_GET(self):
             parsed = urllib.parse.urlsplit(self.path)
             query = urllib.parse.parse_qs(parsed.query)
-            if parsed.path in ("/", "/review"):
+            if parsed.path in ("/", "/review", "/projects"):
                 self.send(200, Path(__file__).with_name("dashboard.html").read_bytes(), "text/html; charset=utf-8")
             elif parsed.path == "/api/dashboard":
                 self.send(200, json.dumps(dashboard.snapshot(), ensure_ascii=False))
+            elif parsed.path == "/api/projects":
+                self.send(200, json.dumps(dashboard.projects.snapshot(active=dashboard.project_running) if dashboard.projects else {"projects": {}, "scans": {}}, ensure_ascii=False))
+            elif parsed.path in ("/project-media", "/project-text"):
+                try:
+                    path = dashboard.projects.text_file(query["project"][0]) if parsed.path == "/project-text" else dashboard.projects.file(query["project"][0], int(query["section"][0]))
+                    if path is None:
+                        raise ValueError("file not present")
+                    if parsed.path == "/project-text":
+                        self.send(200, path.read_bytes(), "text/plain; charset=utf-8")
+                    else:
+                        self.media(path)
+                except CLIENT_DISCONNECTS:
+                    raise
+                except (OSError, ValueError, KeyError, IndexError, AttributeError):
+                    self.send(404, "file not found", "text/plain")
             elif parsed.path == "/api/state" and dashboard.interactive:
                 self.send(200, dashboard.interactive.snapshot())
             elif parsed.path in ("/media", "/text"):
@@ -565,6 +655,8 @@ def make_handler(dashboard):
                 action = self.path.removeprefix("/api/")
                 if action in ("start", "download_n"):
                     dashboard.start(body.get("reader"), body.get("n"))
+                elif action in ("project_scan", "project_open", "project_download", "project_options"):
+                    dashboard.project_action(action, body)
                 elif action == "pause":
                     dashboard.pause()
                 elif action == "rescan":

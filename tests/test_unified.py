@@ -228,10 +228,12 @@ class UnifiedTests(unittest.TestCase):
 
     def test_no_arguments_creates_default_session_in_working_directory(self):
         with contextlib.chdir(self.temp.name), patch("sys.argv", ["librivox_launch.py"]), \
-                patch.object(web, "serve_dashboard") as serve, contextlib.redirect_stdout(io.StringIO()):
+                patch.object(web, "serve_dashboard") as serve, contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(batch.main(), 0)
             path = Path(batch.DEFAULT_SESSION)
             self.assertEqual(path.read_bytes(), b"{}\n")
+            self.assertIn(f"Created session: {path.resolve()}\n{{}}", output.getvalue())
+            self.assertIn(f"Session settings: {path.resolve()}", output.getvalue())
             self.assertEqual(serve.call_args.args[0].manifest, path.resolve())
             self.assertFalse(serve.call_args.kwargs["collect"])
             path.write_text('{"_ignore": "preserve me"}', encoding="utf-8")

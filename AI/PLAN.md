@@ -11,12 +11,14 @@ different recording sessions; downstream training and held-out splits remain the
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
 by default; missing text joins 64 kbps and out-of-range length as a degraded fallback. The interactive script also
 provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
-manual entry and automatic batches use one JSON session and two-page dashboard. Empty JSON objects open
+manual entry and automatic batches use one JSON session and three-page dashboard. Empty JSON objects open
 reader entry; manual controls live with recordings on Review. librivox_launch.py is the main entry point;
 without a filename it uses session.local.json in the working directory. Normal dashboard launches create a
 missing session file containing {}; headless/dry-run commands require an existing file. The older single-reader CLI is a compatibility
 launch into that same controller. Review-only startup loads saved state
-without starting collection. A headless option remains for automation. No installation/build step is needed.
+without starting collection. Projects adds full-reader catalog discovery and whole-project or credited-reader
+section downloads for listeners, independent of sampling state. Opened URLs are promoted to the top of the
+current project list. Project names open a focused native dialog, with a separate small catalog-page link. A headless option remains for sample automation. No installation/build step is needed.
 
 ## Approach and reasons
 
@@ -106,6 +108,26 @@ without starting collection. A headless option remains for automation. No instal
   available. Compatibility APIs stop/join old single-reader workers before resetting checks; leave collection idle afterward and
   restart scanning only when requested. State inspection alone still performs no network work.
 
+## Project library
+
+Projects is an explicit listener workflow, available in JSON sessions: full reader-list scans and direct
+catalog URLs. Include dramatic readings defaults false, persists in catalog state, hides cached dramatic
+projects and skips their detail fetch until enabled. Repeat scan or Load / refresh details loads excluded
+entries. No language, duration, solo-credit or sample-count filter applies. Scans reuse successful cached
+metadata, retry failures, record exact exhaustion/failure/pause and use configured reader timeout or60minutes.
+API fields add authors/language/genres/sections; reader labels use display_name. HTML fallback remains available.
+
+Keep project state under output_root/projects/catalog.json and URL-derived project-key directories. Never
+reuse or migrate sample state.json to represent a whole book. Discovering the same project through several
+readers shares its section downloads. Download whole projects or sections crediting a chosen reader, including
+shared casts. Prefer128, fallback64, retain files and intent, resume explicitly; reuse existing completed paths.
+Metadata refresh preserves downloads; a changed audio list retains the old selection and records alternatives
+rather than relabeling files as new recordings. Source books share the existing text cache; missing text is
+nonfatal for this explicit whole-book workflow. One dashboard worker serializes project and sampling work.
+Review-only output can show cached projects/local players, with no project mutation controls. Project sections
+are rendered lazily when expanded and existing players survive polling. No global catalog crawler, automatic
+whole-project jobs/headless interface or listening decisions on project sections are implemented.
+
 ## Results so far
 
 The existing tool's live LibriVox scanning works with normal default limits. Offline HTTP regression checks
@@ -117,10 +139,12 @@ See the latest dated log entry for validation of the maintenance changes and its
 
 - `librivox_fetch.py`: parsing/selection, State, scanner/downloader, compatibility single-reader CLI and legacy API.
   `download_next` performs one bounded transfer; `downloader` runs explicit requests/active collections.
-- `librivox_dashboard.py` and `dashboard.html`: shared Overview/Review server, UI, local audio and decisions.
+- `librivox_dashboard.py` and `dashboard.html`: Overview/Review/Projects server, UI, local audio and decisions.
 - `tests/test_librivox_fetch.py`: isolated standard-library tests with temporary output and local HTTP fixtures.
 - `librivox_launch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
 - `librivox_text.py`: source links, Gutenberg URL normalization, spaced mirror requests and shared text cache.
+- `librivox_projects.py`: whole-project metadata, saved library, full reader scans and scoped section downloads.
+- `tests/test_projects.py`: discovery, dramatic inclusion, scoped download/recovery, metadata preservation and HTTP/media.
 - `librivox_api.py`: official API lookup by ID or exact title plus URL identity, normalized sections.
 - `tests/test_api_rescan.py`: API matching/fallback, fresh scan bounds, preservation, concurrency and worker lifecycle.
 - `tests/test_texts.py`: offline mirror/provenance/retry, legacy enrichment and premium replacement checks.
