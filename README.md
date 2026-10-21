@@ -4,14 +4,46 @@ Collect a LibriVox reader's solo recordings, one sample per project, and review 
 Give it a JSON list of readers to collect sequentially, then listen and mark recordings to keep or reject.
 Source books download by default when a recording links to Project Gutenberg. Python 3.12, standard library only.
 
+## Launch the dashboard
+
+From the repo root, run:
+
+```sh
+python -B librivox_launch.py
+```
+
+This uses `session.local.json` in the current working directory, creating it with `{}` if missing. Supply
+another filename, such as `python -B librivox_launch.py manual.local.json`, to use a separate session; a
+missing named file is also created. Its parent directory must already exist. Existing files are preserved,
+and invalid JSON is reported rather than replaced. Dry runs and headless runs require an existing valid file.
+The default filename is ignored by Git, as are other `*.local.json` files.
+
+Overview opens with **Add a reader**: enter a reader URL or ID and a collection goal. The dashboard saves it
+in that JSON file. Follow the reader's name to **Review**, where the controls above their recordings let you:
+
+- **Browse / rescan**: find candidates and refresh metadata without downloading audio or books.
+- **Scan 10 more**: raise the candidate target by ten and refresh the scan.
+- Set **Total**, then **Collect / resume** to collect that many premium recordings in total.
+- **Download** an individual candidate, or retry a failed download, without filling the bulk target.
+- Listen to remote **Source previews** before downloading; completed recordings play from disk.
+- Use **Retry 128 kbps** after a failed preview or fallback. This selects the quality; Download requests it.
+
+The first reader added to an empty session sets `auto_collect` to `false`, so reopening it stays idle.
+`{"readers": []}` also works; use a valid JSON object rather than a zero-byte file. A populated batch still
+collects automatically by default. Add `"auto_collect": false` to keep it manual, or use `--browse` for a
+single launch without automatic collection. Reader additions and Total changes are saved to the manifest;
+other settings and `_ignore` notes are preserved. If the JSON changes outside the dashboard, restart to load
+those edits before changing readers or totals through the UI. One worker runs collection, scanning or an
+individual download at a time; Pause stops after the current operation. Listening decisions remain available.
+
 ## Collect a batch
 
 Copy [batch.example.json](batch.example.json) to `batch.local.json`, replace the example readers, then run
 these commands from the repo root:
 
 ```sh
-python -B librivox_batch.py batch.local.json --dry-run
-python -B librivox_batch.py batch.local.json
+python -B librivox_launch.py batch.local.json --dry-run
+python -B librivox_launch.py batch.local.json
 ```
 
 Open the printed address (default http://127.0.0.1:8765/). Collection starts automatically. The dashboard stays
@@ -28,10 +60,11 @@ The dry run validates and prints resolved jobs without writing output or contact
   and links to review all recordings or one reader. Collect / resume starts another pass for all readers or the
   selected reader. Pause collection stops after the current operation, keeping its progress.
 - **Review:** all saved candidates grouped by reader, with downloaded recordings first and pending/other
-  undownloaded candidates below them. Each project has local audio players, section lengths and qualities,
+  undownloaded candidates below them. Each project has audio players, section lengths and qualities,
   source links, download statuses/errors, and Keep / Mark bad / Clear decision. Filter by reader, download status
   or decision. Expand skipped projects for reasons, recording details for individual metadata, and saved state
-  details for everything else in `state.json`. Polling doesn't replace audio players while you're listening.
+  details for everything else in `state.json`. Per-reader manual controls sit above the recordings when opened
+  with a JSON file. Polling doesn't replace audio players or reset an edited Total while you're listening.
 
 Mark bad records the existing rejection decision; it never deletes the audio. During active collection, rejected
 files don't count toward the target. Once a reader finishes, marking something bad **does not restart collection**.
@@ -41,7 +74,7 @@ file and premium counts are shown separately. Summary cards show readers, downlo
 ## Reopen for review
 
 ```sh
-python -B librivox_batch.py --review downloads
+python -B librivox_launch.py --review downloads
 ```
 
 The path may be an output root containing reader folders, a single reader directory, or a `state.json` file.
@@ -74,7 +107,7 @@ printing a traceback; other unexpected request-handler errors remain visible in 
 
 ## Batch JSON
 
-The file has an optional `defaults` object, an `output_root`, and a nonempty `readers` list. Readers can be plain
+The file has an optional `defaults` object, an `output_root`, and a `readers` list (empty or omitted for manual entry). Readers can be plain
 URLs, integer reader IDs, or digit strings. An optional `_ignore` field at the top level, in `defaults`, or in
 a reader object can hold any JSON value (notes, parked settings, or unused reader lists); its contents are
 ignored and never included in resolved jobs. It does not disable the reader object containing it.
@@ -156,7 +189,7 @@ extract chapters or establish that every spoken word matches the downloaded edit
 For an assistant or script that needs a command which exits when collection finishes:
 
 ```sh
-python -B librivox_batch.py batch.local.json --headless > batch-summary.local.json
+python -B librivox_launch.py batch.local.json --headless > batch-summary.local.json
 ```
 
 Progress goes to stderr and the final JSON summary goes to stdout. In a terminal the download counter updates
@@ -194,32 +227,17 @@ Keep is a listening annotation, not a download prerequisite. Listening judgments
 Resuming with degraded downloads searches for premium replacements, preserving earlier files and decisions;
 the downloaded count can exceed the target. Completed collections stay idle until explicitly resumed.
 
-## Ad hoc single-reader use
+## Older single-reader command
 
-```sh
-python -B librivox_fetch.py "READER NAME" https://librivox.org/reader/READER_ID/
-```
+Existing `python librivox_fetch.py "NAME" READER_URL` commands remain compatible, including their existing
+options and output location. They now launch the same collection controller and Review controls as JSON
+sessions, with a metadata browse pass at startup and downloads started explicitly. New sessions should use
+the JSON command above, which also saves reader additions and target changes. Existing state with unknown or
+changed selection filters remains reviewable with `--review`; use a fresh output for new collection.
 
-This opens the same dashboard and scans for candidates. On Overview, choose a total and Collect / resume, or
-use Download on a Review card. Single-reader mode also offers remote source previews for undownloaded candidates,
-Retry 128 kbps after a failed preview, and Scan 10 more. Completed recordings play from disk.
-
-| Option | Default | Meaning |
-|---|---|---|
-| `--projects` | 20 | prime candidates to gather for browsing |
-| `--count` | 10 | initial collection total shown in the dashboard |
-| `--range MIN MAX` | 5 15 | preferred length in minutes |
-| `--min-seconds` | 60 | minimum section length |
-| `--out` | `downloads/<name>` | output folder, default next to the script |
-| `--order` | alpha | `alpha` or `catalog_date` |
-| `--language` | English | empty string permits any |
-| `--port` | 8765 | loopback dashboard port |
-| `--no-download-texts` | off | disable source downloads and the text preference |
-| `--text-mirror` | `https://gutenberg.pglaf.org` | Gutenberg mirror root, as in batch mode |
-
-Queued individual requests and unfinished collection targets survive restarts. Transfers restart from the
-beginning of their `.part` file rather than resuming byte offsets. Use a new output directory for a different
-reader or changed selection filters. Existing files are never deleted by Keep/Mark bad/quality changes.
+Queued requests and interrupted transfers are preserved. Resume a collection explicitly, or request an individual
+Download again. Transfers restart from the beginning of their `.part` file rather than resuming byte offsets.
+Existing files are never deleted by Keep/Mark bad/quality changes.
 
 ## Checks and assistant help
 

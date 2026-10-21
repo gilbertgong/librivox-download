@@ -11,7 +11,11 @@ different recording sessions; downstream training and held-out splits remain the
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
 by default; missing text joins 64 kbps and out-of-range length as a degraded fallback. The interactive script also
 provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
-batch and ad hoc single-reader commands share a two-page dashboard. Review-only startup loads saved state
+manual entry and automatic batches use one JSON session and two-page dashboard. Empty JSON objects open
+reader entry; manual controls live with recordings on Review. librivox_launch.py is the main entry point;
+without a filename it uses session.local.json in the working directory. Normal dashboard launches create a
+missing session file containing {}; headless/dry-run commands require an existing file. The older single-reader CLI is a compatibility
+launch into that same controller. Review-only startup loads saved state
 without starting collection. A headless option remains for automation. No installation/build step is needed.
 
 ## Approach and reasons
@@ -28,7 +32,7 @@ without starting collection. A headless option remains for automation. No instal
   One sample per project provides recording variety without taking entire books.
 - A prime candidate is in range, selected at 128 kbps and has downloaded source text when enabled. Unchecked
   text is provisional until collection checks it. All other candidates are backups. Pause scanning at
-  20 non-rejected prime candidates, or the bulk download target if larger. Rejecting/demoting one resumes scanning.
+  20 non-rejected prime candidates, or the bulk download target if larger. During collection, rejecting/demoting one allows further scanning; idle manual sessions require an explicit scan.
 - Prefer filename-derived 128 kbps URLs; fall back to 64 after an unsuccessful attempt. A player error does not
   prove a file is absent, so the UI explains the failure and offers Retry 128 kbps.
 - Download N selects anything not rejected, prime first; Keep is an annotation, not a prerequisite. Bulk backups
@@ -68,6 +72,14 @@ without starting collection. A headless option remains for automation. No instal
   LibriVox reader-page title at collection time, cache in state, and preserve display punctuation/dates. Explicit
   names take precedence, followed by cached labels. Failed lookup uses Reader ID and retries next invocation;
   dry runs and review mode never fetch names. Directories remain ID-based so display names don't move data.
+- Empty or omitted readers are valid; validate defaults even with no readers. Overview adds readers by URL/ID
+  and saves them to the supplied manifest, preserving settings and notes. The first manual addition disables
+  automatic collection for future launches. auto_collect defaults true for populated batches; --browse suppresses
+  collection for one launch. Refuse UI configuration writes if the manifest changed externally.
+- Review provides per-reader metadata browse/rescan, increased scan target, editable collection total and Pause,
+  remote previews and individual Download/quality retry. Target edits persist in JSON. Explicit individual
+  requests drain only their queue and never fill a saved bulk target. One worker serializes these operations;
+  decisions remain editable during network work. Review-only sessions retain no collection controls.
 - Overview summarizes reader activity/errors/counts, per-reader downloaded duration and explicit collection
   controls, with smaller reader IDs below names linking to LibriVox in a new tab. Compact Goal/Files/Duration/Premium/Bad columns reserve space
   for names; the redundant Available column/card was replaced by file/premium counts. Bad includes rejected
@@ -91,7 +103,7 @@ without starting collection. A headless option remains for automation. No instal
   projects within the normal candidate target/time budget. Preserve downloads, decisions, chosen reviewed/audio
   sections and custom metadata; unreviewed pending sections can refresh. Retain ineligible old candidates but
   exclude them from new transfers. No audio/book downloads during rescan. Pause and status/error reporting are
-  available. Stop/join old single-reader workers before resetting checks; leave collection idle afterward and
+  available. Compatibility APIs stop/join old single-reader workers before resetting checks; leave collection idle afterward and
   restart scanning only when requested. State inspection alone still performs no network work.
 
 ## Results so far
@@ -103,11 +115,11 @@ See the latest dated log entry for validation of the maintenance changes and its
 
 ## Orientation
 
-- `librivox_fetch.py`: parsing/selection, State, scanner/downloader, single-reader CLI and compatibility API.
+- `librivox_fetch.py`: parsing/selection, State, scanner/downloader, compatibility single-reader CLI and legacy API.
   `download_next` performs one bounded transfer; `downloader` runs explicit requests/active collections.
 - `librivox_dashboard.py` and `dashboard.html`: shared Overview/Review server, UI, local audio and decisions.
 - `tests/test_librivox_fetch.py`: isolated standard-library tests with temporary output and local HTTP fixtures.
-- `librivox_batch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
+- `librivox_launch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
 - `librivox_text.py`: source links, Gutenberg URL normalization, spaced mirror requests and shared text cache.
 - `librivox_api.py`: official API lookup by ID or exact title plus URL identity, normalized sections.
 - `tests/test_api_rescan.py`: API matching/fallback, fresh scan bounds, preservation, concurrency and worker lifecycle.
@@ -115,6 +127,7 @@ See the latest dated log entry for validation of the maintenance changes and its
 - `batch.example.json`: example defaults, reader overrides and output root; copy to an ignored `*.local.json`.
 - `tests/test_batch.py`: offline batch validation, local HTTP collection, resume, failure and interruption tests.
 - `tests/test_dashboard.py`: state-only review, media ranges, decisions, concurrent collection and CLI controls.
+- `tests/test_unified.py`: empty sessions, reader entry/persistence, manual controls, queue isolation and startup policy.
 - `README.md`: running the tool, options and output.
 - `AI/USAGE.md`: assistant instructions for setup, smoke tests and normal use.
 - `AI/PROJECT_LOG.md`: initial design record and dated maintenance history.
@@ -124,14 +137,13 @@ See the latest dated log entry for validation of the maintenance changes and its
 
 - Reader listing/name and fallback HTML parsing still depend on site markup. Project details normally use the
   API; inspect `librivox_api.py` and `read_project` if its schema changes.
-- Failed project-page checks are saved as skips. A listing-level exception stops scanning; the existing worker
-  treats that as scanning finished, which also permits bulk backups. Read the UI status before judging coverage.
+- Failed project checks are saved as skips. Explicit Rescan retries them; listing failures are reported without
+  enabling bulk backups. Legacy scanner APIs remain for compatibility, outside the normal launch paths.
 - Completion checks confirm that the recorded file exists, not that MP3 content is valid or unmodified.
 - A 64 kbps transfer failure stays failed until manually requested again; there is no unlimited retry loop.
 - Batch mode retries failed transfers once on the next invocation. Its time budget is checked between
   operations, not a hard interruption of an in-flight network operation. No concurrent writers to one output.
-- Reuse an output directory for the same reader and selection options. Existing checked projects are not
-  re-evaluated when CLI filters change; use a fresh `--out` to make a new selection. Explicit Rescan rechecks
+- Reuse an output directory for the same reader and selection options. Changed selection filters require a fresh output root for collection. Explicit Rescan rechecks
   metadata using the existing filters, never silently changes selection settings.
 
 ## Open questions and next steps

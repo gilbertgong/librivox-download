@@ -15,7 +15,9 @@ CLIENT_DISCONNECTS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedEr
 
 
 class Dashboard:
-    def __init__(self, jobs=(), paths=None, interactive=None):
+    def __init__(self, jobs=(), paths=None, interactive=None, manifest=None):
+        self.manifest = Path(manifest).resolve() if manifest else None
+        self.manifest_data = json.loads(self.manifest.read_text(encoding="utf-8")) if manifest else None
         self.jobs = {job["reader_id"]: job for job in jobs}
         self.paths = {rid: Path(job["out"]) / "state.json" for rid, job in self.jobs.items()}
         self.paths.update(paths or {})
@@ -133,11 +135,57 @@ class Dashboard:
                 readers.append({"id": rid, "name": rid, "status": "state error", "detail": str(e),
                                 "target": 0, "downloaded": 0, "usable": 0, "premium": 0, "rejected": 0, "kept": 0,
                                 "candidates": [], "checked": {}, "state": {}})
-        return {"mode": "interactive" if self.interactive else "batch" if self.jobs else "review",
+        return {"mode": "interactive" if self.interactive else "batch" if self.jobs or self.manifest else "review",
                 "running": running or bool(self.interactive and self.interactive.collecting),
                 "rescanning": self.rescanning, "can_rescan": bool(self.paths),
                 "pausing": running and self.stop.is_set(),
+                "can_add": bool(self.manifest),
                 "can_collect": bool(self.jobs or self.interactive), "readers": readers}
+
+    def save_manifest(self, data):
+        """Validate before replacing; don't overwrite edits made outside this dashboard."""
+        import librivox_launch as batch
+        jobs = batch.load_batch(self.manifest, data)
+        if json.loads(self.manifest.read_text(encoding="utf-8")) != self.manifest_data:
+            raise ValueError("JSON file changed outside the dashboard; restart to load those changes")
+        temporary = self.manifest.with_suffix(self.manifest.suffix + ".tmp")
+        temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+        temporary.replace(self.manifest)
+        self.manifest_data = data
+        self.jobs = {job["reader_id"]: job for job in jobs}
+        self.paths.update({rid: Path(job["out"]) / "state.json" for rid, job in self.jobs.items()})
+
+    def add_reader(self, value, count):
+        import librivox_launch as batch
+        with self.lock:
+            if not self.manifest or self.running:
+                raise ValueError("reader entry requires an idle JSON dashboard")
+            batch.positive(count, "count", integer=True)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("enter a LibriVox reader URL or reader ID")
+            value = value.strip()
+            reader = {"reader_id" if value.isdigit() else "url": value, "count": count}
+            data = copy.deepcopy(self.manifest_data)
+            if not self.jobs:
+                data["auto_collect"] = False
+            data.setdefault("readers", []).append(reader)
+            self.save_manifest(data)
+
+    def set_count(self, rid, count):
+        import librivox_launch as batch
+        batch.positive(count, "count", integer=True)
+        if rid not in self.jobs:
+            raise ValueError("unknown reader")
+        if self.manifest:
+            data = copy.deepcopy(self.manifest_data)
+            index = list(self.jobs).index(rid)
+            entry = data["readers"][index]
+            if not isinstance(entry, dict):
+                entry = {"reader_id": rid}
+            data["readers"][index] = {**entry, "count": count}
+            self.save_manifest(data)
+        else:
+            self.jobs[rid]["count"] = count
 
     def register(self, job, state):
         with self.lock:
@@ -183,6 +231,10 @@ class Dashboard:
                 raise ValueError("review only: open with a batch JSON file to collect")
             if rid is not None and rid not in self.jobs:
                 raise ValueError("unknown reader")
+            if count is not None:
+                if rid is None:
+                    raise ValueError("select a reader to change its target")
+                self.set_count(rid, count)
             jobs = [self.jobs[rid]] if rid else list(self.jobs.values())
             self.stop.clear()
             self.running = True
@@ -190,7 +242,7 @@ class Dashboard:
                 self.results[job["reader_id"]] = {"status": "waiting"}
 
             def work():
-                import librivox_batch as batch
+                import librivox_launch as batch
                 try:
                     summary = batch.run_batch(jobs, on_state=self.register, on_result=self.finished,
                                               stop=self.stop, state_factory=self.state_factory)
@@ -220,7 +272,7 @@ class Dashboard:
 
     def rescan(self, rid=None):
         """Explicit metadata-only refresh, including when opened with --review."""
-        import librivox_batch as batch
+        import librivox_launch as batch
         with self.lock:
             if self.running or (self.interactive and (self.interactive.collecting or self.interactive.queue)):
                 raise ValueError("pause collection and wait for outstanding downloads before rescanning")
@@ -237,6 +289,7 @@ class Dashboard:
                 elif reader in self.jobs:
                     args = batch.reader_args(self.jobs[reader])
                     batch.validate_resume(self.jobs[reader], args)
+                    args.projects = max(self.jobs[reader].get("projects", args.projects), int(saved.get("target", 0)))
                 else:
                     selection = saved.get("selection")
                     if not isinstance(selection, dict) or not {"language", "range_minutes", "min_seconds", "order"} <= selection.keys():
@@ -271,8 +324,14 @@ class Dashboard:
                                 self.results[reader] = {"status": "scan paused", "detail": "rescan not started"}
                             continue
                         try:
+                            source = None
+                            if reader in self.jobs:
+                                args.name, source = batch.resolve_name(self.jobs[reader], self.read(reader))
+                                self.jobs[reader]["name"] = args.name
                             with self.lock:
                                 state = self.interactive or self.state_factory(args, reader, self.paths[reader].parent)
+                                if source:
+                                    state.extra["reader_name_source"] = source
                                 self.results.pop(reader, None)
                             result = app.rescan_reader(state, self.stop, timeout)
                         except Exception as e:
@@ -304,8 +363,16 @@ class Dashboard:
             state = self.states.get(rid)
             if self.rescanning and action != "decide":
                 raise ValueError("wait for the metadata rescan to finish")
-            if action != "decide" and (self.interactive is None or state is not self.interactive):
-                raise ValueError("collection actions are available only in single-reader mode")
+            if action != "decide" and self.interactive is None:
+                if rid not in self.jobs:
+                    raise ValueError("open the JSON dashboard to download or select quality")
+                if self.running:
+                    raise ValueError("pause collection and wait for it to stop before individual actions")
+                import librivox_launch as batch
+                args = batch.reader_args(self.jobs[rid])
+                saved = batch.validate_resume(self.jobs[rid], args)
+                args.name = saved.get("reader", args.name)
+                state = app.State(args, rid, self.paths[rid].parent)
             lock = state.lock if state else self.lock
             with lock:
                 saved = copy.deepcopy(state.record()) if state else self.read(rid)
@@ -337,12 +404,59 @@ class Dashboard:
                 if state:
                     state.save()
                     state.wake.set()
+                    if not self.interactive and action != "decide":
+                        self.states.pop(rid, None)
+                        self.results.pop(rid, None)
+                        if action == "download" and state.queue:
+                            self.start_individual(rid, state)
                 else:
                     saved["updated_at"] = app.now()
                     path = self.paths[rid]
                     tmp = path.with_suffix(".review.tmp")
                     tmp.write_text(json.dumps(saved, indent=1, ensure_ascii=False), encoding="utf-8")
                     tmp.replace(path)
+
+    def start_individual(self, rid, state):
+        """Drain explicit requests only; a saved bulk target must not start extra transfers."""
+        self.stop.clear()
+        self.running = True
+        self.states[rid] = state
+
+        def work():
+            status, detail = "idle", ""
+            try:
+                while state.queue and not self.stop.is_set():
+                    if not app.download_next(state, cancelled=lambda c: self.stop.is_set(), individual_only=True):
+                        break
+                status = "paused" if self.stop.is_set() else "idle"
+            except Exception as e:
+                status, detail = "failed", str(e)
+            finally:
+                with self.lock:
+                    with state.lock:
+                        state.status = status
+                        state.save()
+                    self.results[rid] = {"status": status, "detail": detail}
+                    self.states.pop(rid, None)
+                    self.running = False
+
+        self.worker = threading.Thread(target=work, daemon=True)
+        self.worker.start()
+
+    def scan_more(self, rid, n=10):
+        import librivox_launch as batch
+        with self.lock:
+            if self.running or rid not in self.jobs:
+                raise ValueError("select a configured reader while collection is idle")
+            batch.positive(n, "additional candidates", integer=True)
+            args = batch.reader_args(self.jobs[rid])
+            saved = batch.validate_resume(self.jobs[rid], args)
+            args.name = saved.get("reader", args.name)
+            state = app.State(args, rid, self.paths[rid].parent)
+            with state.lock:
+                state.target = max(self.jobs[rid].get("projects", args.projects), int(saved.get("target", 0))) + n
+                state.save()
+            self.rescan(rid)
 
 
 def make_handler(dashboard):
@@ -455,6 +569,10 @@ def make_handler(dashboard):
                     dashboard.pause()
                 elif action == "rescan":
                     dashboard.rescan(body.get("reader"))
+                elif action == "add_reader":
+                    dashboard.add_reader(body.get("value"), body.get("n", 10))
+                elif action == "scan_more" and not dashboard.interactive:
+                    dashboard.scan_more(body.get("reader"), body.get("n", 10))
                 elif action == "scan_more" and dashboard.interactive:
                     if dashboard.rescanning:
                         raise ValueError("wait for the metadata rescan to finish")
@@ -474,7 +592,7 @@ def make_handler(dashboard):
     return Handler
 
 
-def serve_dashboard(dashboard, port=8765, collect=False):
+def serve_dashboard(dashboard, port=8765, collect=False, browse=False):
     with app.LocalServer(("127.0.0.1", port), make_handler(dashboard)) as server:
         print(f"Dashboard: http://127.0.0.1:{server.server_port}/ (Ctrl+C to close)", flush=True)
         dashboard.serving = True
@@ -482,6 +600,8 @@ def serve_dashboard(dashboard, port=8765, collect=False):
             dashboard.ensure_interactive_workers()
         elif collect:
             dashboard.start()
+        elif browse:
+            dashboard.rescan()
         try:
             server.serve_forever()
         except KeyboardInterrupt:

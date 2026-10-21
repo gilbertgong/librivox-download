@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import librivox_api as api
-import librivox_batch as batch
+import librivox_launch as batch
 import librivox_dashboard as web
 import librivox_fetch as app
 from test_librivox_fetch import candidate, serving

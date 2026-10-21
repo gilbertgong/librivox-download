@@ -21,7 +21,7 @@ Prerequisite: a local checkout and permission to run a Python interpreter.
 2. Use an existing suitable interpreter. If none exists, explain that Python must be installed and follow the
    user's environment preferences. No third-party Python dependencies, virtual environment, model weights or
    build tools are required.
-3. From the repo root run `python -B librivox_batch.py --help` with that interpreter.
+3. From the repo root run `python -B librivox_launch.py --help` with that interpreter.
 
 Success: help exits successfully. Do not install unrelated audio/AI libraries.
 
@@ -39,18 +39,25 @@ Success: every test passes. No existing download directory has been used as a fi
 
 ## Find samples / start the tool
 
-Prerequisites: setup; internet access; reader name and LibriVox reader URL; desired output directory and free port.
-Use the documented defaults unless the user asks otherwise. Reuse existing state only for that reader and the
-same selection options; a fresh output directory is appropriate for a new selection.
+Prerequisites: setup; a writable session directory and free loopback port. Internet access is needed only
+when the user requests metadata, remote previews or downloads. Use documented selection defaults.
 
-1. Run `python librivox_fetch.py "READER NAME" https://librivox.org/reader/READER_ID/` from the repo root.
-   Add `--out OUTPUT_DIRECTORY` or `--port PORT` as needed. Default output is `downloads/<name>` next to the script.
-2. Open the printed loopback URL. Check the reader/output and that status progresses from scanning to paused or
-   listing exhausted. A stopped/error status is a failure to investigate, not successful exhaustion.
-3. Leave scanning at its normal limits; do not run side queries to survey the reader's entire catalog.
-4. Use Overview for collection controls and Review for candidates. Explain Keep/Mark bad and the prime/backup
-   split if needed. Keep marks approval; bulk downloading requires only
-   that a candidate has not been rejected. Do not make listening decisions for the user.
+1. Launch `python -B librivox_launch.py [SESSION.local.json] [--port PORT]`. With no filename it uses
+   session.local.json in the current working directory. A normal dashboard launch creates a missing file
+   containing {}; existing files are preserved. Check which file will be used before launching: an existing
+   populated session may collect automatically. Use a separate scratch directory/filename for tests.
+   Dry runs and headless runs require an existing valid file and never create one.
+   For existing configurations use `--browse` to open without automatic collection, or honor `auto_collect`.
+2. On Overview, Add a reader accepts a LibriVox URL or ID and target, saves it to the session, and stays idle.
+   Follow the reader link to Review. Browse / rescan finds candidates without audio/text downloads.
+3. Review provides per-reader Total, Collect / resume, Scan 10 more and Pause, plus per-card Download and
+   Retry 128 kbps. Pending candidates have source previews; saved files use local players. Keep / Mark bad
+   records the user's judgments. Never invent listening decisions.
+4. Manual controls use one sequential worker; wait for completion or pause before starting another operation.
+   Reader additions and target changes persist in JSON; `_ignore` and other settings survive. External JSON
+   edits require a restart before further UI configuration writes. An initially empty session saves
+   auto_collect=false after its first addition, so future launches remain manual.
+5. Leave scanning at normal limits. Do not survey a catalog or increase targets unless requested.
 
 Success: the UI is reachable, shows the intended reader/output, and offers candidates or explains skips/errors.
 A request to start the tool leaves it running for the user; a bounded test stops its own server when finished.
@@ -62,8 +69,8 @@ Prerequisites: find samples above; the user's requested count or individual sele
 internet access to LibriVox, the audio host and the configured Gutenberg mirror. This request includes setup
 and scanning if they have not already happened.
 
-1. For new multi-reader requests, prefer the batch task below. In single-reader mode, use Download on a Review
-   card or set N and use Collect / resume on Overview. The collection target means N total
+1. For new multi-reader requests, prefer the batch task below. Use Download on a Review
+   card or set Total and use Collect / resume above that reader's recordings. The collection target means N total
    premium non-rejected samples in this output, including earlier downloads; it is not N additional samples.
    Premium means preferred length, 128 kbps and downloaded source text when enabled. The tool accepts degraded
    fallbacks after listing exhaustion. Replacements preserve older recordings, so the saved count can exceed N.
@@ -103,11 +110,11 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
 3. Set `output_root` explicitly if the user chose a destination. Relative paths are relative to the JSON file.
    If operating under a role with read-only repository access, place both JSON and output outside the repo and
    invoke Python with `-B`. Respect that role's authorization boundaries for data collection.
-4. Run `python -B librivox_batch.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
+4. Run `python -B librivox_launch.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
    This validates the entire configuration without writing output or contacting remote services. Check that no
    other job is using the same output directories before starting actual collection.
-5. If the user wants a browsable dashboard, run `python -B librivox_batch.py PATH_TO_BATCH [--port PORT]` and open
-   the printed loopback URL. Collection starts automatically. Overview shows progress and explicit collection/
+5. If the user wants a browsable dashboard, run `python -B librivox_launch.py PATH_TO_BATCH [--port PORT]` and open
+   the printed loopback URL. Collection starts automatically unless auto_collect is false or --browse is supplied. Overview shows progress and explicit collection/
    pause controls; Review shows all saved candidates and decisions. The server remains available after completion.
    If the request is for unattended command execution, use `--headless` so it exits when collection finishes.
    Only headless mode guarantees a JSON-only stdout summary; progress remains on stderr. To save that summary,
@@ -134,7 +141,7 @@ Prerequisites: setup and the user's existing output root, reader directory or st
 access, migration or new index is needed. This request authorizes opening the dashboard; it doesn't authorize
 making subjective listening decisions or collecting replacements unless the user requests those actions.
 
-1. Run `python -B librivox_batch.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
+1. Run `python -B librivox_launch.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
    the root state file or immediate reader subdirectories. An empty root is supported; duplicate reader IDs
    require opening the intended reader directory explicitly. Legacy saved state can be reviewed without conversion.
 2. Overview shows saved readers, counts and last status. Review links preserve the reader selection. Review
@@ -171,7 +178,7 @@ to force a rescan. Ordinary review startup remains offline.
 
 Prerequisites: setup, a user-specified reader, internet access, fresh scratch output and a free port.
 
-Start the normal tool with default selection limits and the scratch `--out`/`--port`. Check the UI and a
+Start a scratch JSON session with default selection limits, a fresh output_root and a free `--port`. Check the UI and a
 Keep/Mark bad/clear cycle. If the request includes testing downloads, request one offered sample and verify the
 saved file and state; otherwise do not start media transfers. Restart with the same scratch arguments and check
 that decisions and completion persist. Stop the check's own server. Retain scratch recordings unless the user
@@ -182,7 +189,7 @@ has authorized their removal. Judge tool behavior, not the particular reader's c
 Prerequisite: the original output directory and the same reader/selection arguments.
 
 Stop with Ctrl+C and relaunch using that output. Saved individual requests, interrupted transfers and an
-unfinished bulk target resume. Transfers begin again rather than resuming byte offsets. Missing completed
+unfinished bulk target remain saved. In a manual session, explicitly resume collection or click Download again. Transfers begin again rather than resuming byte offsets. Missing completed
 files appear as missing and can be downloaded again, automatically if needed by an active bulk target.
 If files were deliberately moved, explain why the original output no longer counts them; do not move them
 back, delete them, or reset the user's decisions without a request. No manual JSON editing is normally needed.

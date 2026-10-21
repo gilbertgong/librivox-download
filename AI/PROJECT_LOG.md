@@ -388,3 +388,42 @@ Validation: all 81 offline tests pass, including simulated disconnects during he
 responses, plus propagation of unrelated I/O errors. All 15 dashboard tests also pass under the reported MSYS2
 Python3.14 interpreter; existing HTTP-error fixture objects emitted ResourceWarnings during test cleanup.
 The user's active batch was left running; the loaded server receives this fix on its next launch.
+
+
+## 2026-10-20 — One collection workflow, with manual controls on Review
+
+Consolidated the normal launch paths around the sequential batch controller. A valid empty JSON object or
+empty/omitted readers list now opens Overview reader entry. URL/ID additions and collection target changes
+save to that manifest while preserving other settings and _ignore notes; externally changed JSON is not
+overwritten. First addition to an empty session sets auto_collect=false so manual sessions reopen idle.
+Populated batches retain automatic collection by default; --browse suppresses it for one dashboard launch.
+Headless collection and state-only --review remain available.
+
+At the user's request, manual controls live above each reader's recordings on Review: metadata browse/rescan,
+Scan 10 more, Total, Collect / resume and Pause. Pending candidates offer remote previews; per-card Download
+and quality retry now work in configured sessions. Explicit downloads drain their request queue without
+filling the saved bulk target or fetching unrelated candidates' source books. One worker serializes scanning/collection/individual transfers; decisions
+remain writable during operations. Overview keeps reader entry, progress and bulk controls. The older
+name/URL CLI forwards into this same controller with a metadata-only startup pass and its original output
+location. Compatibility APIs remain for older integrations.
+
+Validation: 92 offline tests pass on Python 3.12 and 3.14, including eleven new session/manual workflow checks.
+JavaScript syntax passes. A browser check using synthetic local metadata/audio verified empty-session reader
+entry, JSON persistence, metadata-only browsing, remote playback, and one individual download while another
+candidate stayed pending. No external collection or existing user output was used. Python 3.14 reports the
+existing HTTPError fixture cleanup ResourceWarnings; all assertions pass.
+
+
+## 2026-10-20 — Explicit launcher name and automatic session creation
+
+Renamed librivox_batch.py to librivox_launch.py so the command to run is apparent. Updated imports, tests
+and current usage docs; historical log entries retain the original name. No duplicate old launcher remains.
+Without a filename the launcher uses session.local.json in the current working directory. Normal dashboard
+launches create a missing session file containing {} using exclusive creation, preserving existing files
+and reporting invalid JSON. Explicit missing filenames work the same way when their parent directory exists.
+Dry-run and headless commands keep their existing no-creation behavior and require a valid existing file;
+--review uses only the requested saved output. The default *.local.json filename is already ignored by Git.
+
+Validation: 95 offline tests pass on Python 3.12 and 3.14. Added checks for no-argument/default startup,
+explicit missing-file creation, reopening without overwriting settings, invalid-file preservation and no
+session creation from dry-run/headless/review. Checks use temporary directories, not user configurations.

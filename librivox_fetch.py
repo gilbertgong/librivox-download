@@ -550,11 +550,12 @@ def prepare_text(st, c):
     st.wake.set()
 
 
-def download_next(st, cancelled=None):
+def download_next(st, cancelled=None, individual_only=False):
     """Perform one transfer. Return False when idle; the worker waits between attempts."""
     with st.lock:
         st.reconcile_downloads()
         existing = next((c for c in st.candidates if c.get("text_required") and c["decision"] != "reject"
+                         and (not individual_only or c["url"] in st.queue)
                          and (c.get("download") or {}).get("status") == "done"
                          and c["url"] not in st.text_attempted and not texts.text_present(st.out, c)), None)
     if existing:
@@ -659,9 +660,15 @@ def main():
         ap.error(str(e))
 
     rid = reader_id(args.url)
-    st = State(args, rid, Path(args.out or Path(__file__).parent / "downloads" / slug(args.name)))
+    out = Path(args.out or Path(__file__).parent / "downloads" / slug(args.name))
+    import librivox_launch as batch
     from librivox_dashboard import Dashboard, serve_dashboard
-    serve_dashboard(Dashboard.for_interactive(st), args.port)
+    job = {**batch.DEFAULTS, "reader_id": rid, "url": args.url, "name": args.name,
+           "name_source": "explicit", "out": str(out), "count": args.count, "projects": args.projects,
+           "range_minutes": args.range, "min_seconds": args.min_seconds, "order": args.order,
+           "language": args.language, "download_texts": args.download_texts, "text_mirror": args.text_mirror}
+    # Compatibility launch: the same controller and controls as a JSON session, metadata only at startup.
+    serve_dashboard(Dashboard(jobs=[job]), args.port, browse=True)
 
 
 if __name__ == "__main__":

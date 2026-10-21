@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from unittest.mock import patch
 
-import librivox_batch as batch
+import librivox_launch as batch
 import librivox_dashboard as dashboard
 import librivox_fetch as app
 import librivox_text as texts

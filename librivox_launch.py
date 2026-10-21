@@ -1,9 +1,10 @@
 """Collect and review LibriVox samples in a local dashboard, or run a headless JSON batch.
 
-    python librivox_batch.py batch.json --dry-run
-    python librivox_batch.py batch.json
-    python librivox_batch.py --review downloads
-    python librivox_batch.py batch.json --headless
+    python librivox_launch.py
+    python librivox_launch.py batch.json --dry-run
+    python librivox_launch.py batch.json
+    python librivox_launch.py --review downloads
+    python librivox_launch.py batch.json --headless
 
 With --headless, progress goes to stderr and the final JSON summary goes to stdout. Exit 0 means all targets met;
 1 means incomplete/failed readers, 2 means invalid configuration, and 130 means interrupted.
@@ -25,6 +26,7 @@ import librivox_fetch as app
 DEFAULTS = {"count": 10, "language": "English", "range_minutes": [5, 15],
             "min_seconds": 60, "order": "alpha", "timeout_minutes": 60,
             "download_texts": True, "text_mirror": app.texts.DEFAULT_MIRROR}
+DEFAULT_SESSION = "session.local.json"
 
 
 def positive(value, label, integer=False):
@@ -40,12 +42,15 @@ def normalize_reader_id(value, label):
     return str(int(value))
 
 
-def load_batch(path):
+def load_batch(path, data=None):
     """Validate the whole manifest before any writes or network requests. Paths are manifest-relative."""
     path = Path(path).resolve()
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or set(data) - {"defaults", "output_root", "readers", "_ignore"}:
-        raise ValueError("batch accepts only defaults, output_root, readers and _ignore fields")
+    if data is None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or set(data) - {"defaults", "output_root", "readers", "_ignore", "auto_collect"}:
+        raise ValueError("batch accepts only defaults, output_root, readers, auto_collect and _ignore fields")
+    if not isinstance(data.get("auto_collect", True), bool):
+        raise ValueError("auto_collect must be true or false")
     defaults = data.get("defaults", {})
     if not isinstance(defaults, dict) or set(defaults) - (DEFAULTS.keys() | {"_ignore"}):
         raise ValueError(f"defaults accepts only: {', '.join(DEFAULTS)}, _ignore")
@@ -54,9 +59,12 @@ def load_batch(path):
     if not isinstance(output, str) or not output.strip():
         raise ValueError("output_root must be a nonempty path string")
     output = (path.parent / output).resolve()
-    readers = data.get("readers")
-    if not isinstance(readers, list) or not readers:
-        raise ValueError("readers must be a nonempty list")
+    readers = data.get("readers", [])
+    if not isinstance(readers, list):
+        raise ValueError("readers must be a list")
+    empty = not readers
+    # Validate defaults even when the dashboard starts without readers.
+    readers = readers or [1]
     jobs, seen = [], set()
     for index, reader in enumerate(readers, 1):
         label = f"reader {index}"
@@ -106,7 +114,7 @@ def load_batch(path):
         jobs.append({**options, "reader_id": rid, "name": name,
                      "name_source": "explicit" if "name" in reader else "pending",
                      "url": f"https://librivox.org/reader/{rid}/", "out": str(output / rid)})
-    return jobs
+    return [] if empty else jobs
 
 
 def reader_args(job):
@@ -301,16 +309,20 @@ def run_batch(jobs, on_state=None, on_result=None, stop=None, state_factory=None
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("batch", nargs="?", type=Path, help="JSON batch file; paths are relative to this file")
+    parser.add_argument("batch", nargs="?", type=Path,
+                        help=f"JSON session file (default: {DEFAULT_SESSION} in the current directory); create if missing")
     parser.add_argument("--review", type=Path, help="review an output root, reader directory or state.json; no collection")
     parser.add_argument("--port", type=int, default=8765, help="loopback dashboard port (default 8765)")
     parser.add_argument("--headless", action="store_true", help="collect without a dashboard and exit when finished")
     parser.add_argument("--dry-run", action="store_true", help="validate and print resolved jobs; no writes or network")
+    parser.add_argument("--browse", action="store_true", help="open the dashboard without automatic collection")
     args = parser.parse_args()
-    if bool(args.batch) == bool(args.review):
-        parser.error("provide a batch JSON file or --review PATH")
-    if args.review and (args.headless or args.dry_run):
-        parser.error("--headless and --dry-run apply only to a batch JSON file")
+    if args.batch and args.review:
+        parser.error("provide a JSON session file or --review PATH, not both")
+    if args.review and (args.headless or args.dry_run or args.browse):
+        parser.error("--headless, --dry-run and --browse apply only to a batch JSON file")
+    if args.headless and args.browse:
+        parser.error("--browse requires the dashboard")
     if args.review:
         from librivox_dashboard import Dashboard, serve_dashboard
         try:
@@ -319,7 +331,15 @@ def main():
             parser.error(str(e))
         serve_dashboard(dashboard, args.port)
         return 0
+    args.batch = args.batch or Path(DEFAULT_SESSION)
     try:
+        if not args.headless and not args.dry_run:
+            try:
+                with args.batch.open("x", encoding="utf-8", newline="\n") as session:
+                    session.write("{}\n")
+                print(f"Created session: {args.batch.resolve()}", flush=True)
+            except FileExistsError:
+                pass  # existing files, including invalid/empty ones, must never be overwritten
         jobs = load_batch(args.batch)
     except (OSError, ValueError, TypeError) as e:
         parser.error(str(e))
@@ -328,7 +348,9 @@ def main():
         return 0
     if not args.headless:
         from librivox_dashboard import Dashboard, serve_dashboard
-        serve_dashboard(Dashboard(jobs=jobs), args.port, collect=True)
+        data = json.loads(args.batch.read_text(encoding="utf-8"))
+        serve_dashboard(Dashboard(jobs=jobs, manifest=args.batch), args.port,
+                        collect=bool(jobs) and data.get("auto_collect", True) and not args.browse)
         return 0
     summary = run_batch(jobs)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
