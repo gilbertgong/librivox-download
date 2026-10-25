@@ -476,3 +476,21 @@ Validation: browser checks with synthetic local metadata/audio confirmed new/exi
 content, working reader-scoped downloads and live status inside the modal, Escape/Close and restored focus.
 No browser console errors. JavaScript syntax and all110 offline tests pass. Documentation updated; no data
 migration, backend selection change or new real-world downloads. Reload the dashboard page for these UI changes.
+
+## 2026-10-25 — Mountable downloader component
+
+Added librivox_web.py and vendored BSD-licensed microweb: the established standalone CLI and combined hosts
+use one set of routes around the existing Dashboard controller. Factories defer controller/session setup
+and workers until after binding. HTTP handlers drain before pause/join shutdown. Compatibility make_handler
+delegates to the same app. Frontend navigation/API requests and returned local audio/text links work under
+mount prefixes, including per-reader review links. Headless selection/collection code is unchanged.
+Documented component settings, library read interface revision 1 and vendored source provenance. Existing
+110 regressions plus component tests exercise quiet construction, bind failure, settings paths, mounted
+pages, decisions, audio HEAD/ranges and worker shutdown. A separate synthetic-workbench proof used only
+generated audio and disposable state, including standalone/combined HTTP and browser playback checks.
+No actual voice workbench, research code, live queue, real downloads or production state was modified.
+
+Final validation: all 114 tests pass on Python 3.12 and 3.14; Python 3.14 still reports existing HTTPError
+fixture cleanup ResourceWarnings. The mounted browser check found and fixed a root-relative per-reader
+review link. Navigation, local playback and the synthetic downstream task then worked under the shared shell.
+The vendored runtime matches the upstream development file byte-for-byte; syntax/link/LF/whitespace checks pass.

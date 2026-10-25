@@ -8,6 +8,13 @@ different recording sessions; downstream training and held-out splits remain the
 
 ## Current direction
 
+The HTTP layer now uses vendored microweb and a quiet `librivox_web.create_component(settings)` factory.
+Standalone CLI and combined hosting share routes and lifecycle; controller/selection/download logic is
+unchanged. Prefix-aware frontend and media links support mounting. See [component and library contracts](../docs/components.md).
+No actual voice workbench is included here.
+All 114 tests pass on Python 3.12 and 3.14. Combined/standalone HTTP and mounted browser checks used
+generated audio and isolated state; no production collection or research work was used for verification.
+
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
 by default; missing text joins 64 kbps and out-of-range length as a degraded fallback. The interactive script also
 provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
@@ -21,6 +28,10 @@ section downloads for listeners, independent of sampling state. Opened URLs are 
 current project list. Project names open a focused native dialog, with a separate small catalog-page link. A headless option remains for sample automation. No installation/build step is needed.
 
 ## Approach and reasons
+
+- Component factories perform no writes or worker startup; initialization follows socket binding. The host
+  drains requests before pausing/joining owned collection services. Existing make_handler delegates to the
+  same routes. The normal CLI retains its session-file creation behavior; component factories defer it to startup.
 
 - Scan only LibriVox metadata. Contact the audio host only for chosen playback/download URLs; this avoids
   unnecessary metadata requests. Use the official extended audiobooks API for project sections/readers/durations

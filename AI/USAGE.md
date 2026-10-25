@@ -228,3 +228,10 @@ missing session also prints its initial {} contents. Do not replace an existing 
 Success: the intended project/scope is recorded, chosen sections exist locally and play through the dashboard,
 or a precise partial outcome explains failed/paused sections. Source books follow configured text preferences;
 there is no alignment, conversion or packaging step. Ordinary page startup does not make network requests.
+
+## Host as a component
+
+Follow docs/components.md. Use an absolute session_file or review_root, or resolve it against settings_dir.
+For a smoke check use a fresh scratch session and collect=false. Construction must not write files or start
+workers; startup follows socket binding. Check mounted navigation, decisions and local playback, then close
+the host and verify owned collection services stop. Do not use a live production library for integration tests.

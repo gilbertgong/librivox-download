@@ -1,11 +1,9 @@
 """Collection, sampling review and project library dashboard, backed by local JSON state."""
 import copy
 import json
-import mimetypes
 import re
 import threading
 import urllib.parse
-from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -535,178 +533,30 @@ class Dashboard:
 
 
 def make_handler(dashboard):
-    class Handler(BaseHTTPRequestHandler):
+    """Compatibility HTTP handler around the same mountable application routes."""
+    from librivox_web import create_app
+    base = create_app(dashboard)._handler_class()
+    class Handler(base):
         def handle(self):
             try:
                 super().handle()
             except CLIENT_DISCONNECTS:
-                # Browser navigation, cancelled polling or stopped playback can close the local socket.
                 self.close_connection = True
 
-        def log_message(self, *args):
-            pass
-
         def send(self, status, content, kind="application/json"):
+            # Retained for small external HTTP fixtures subclassing this handler.
             data = content if isinstance(content, bytes) else content.encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
-
-        def do_HEAD(self):
-            self.do_GET()
-
-        def do_GET(self):
-            parsed = urllib.parse.urlsplit(self.path)
-            query = urllib.parse.parse_qs(parsed.query)
-            if parsed.path in ("/", "/review", "/projects"):
-                self.send(200, Path(__file__).with_name("dashboard.html").read_bytes(), "text/html; charset=utf-8")
-            elif parsed.path == "/api/dashboard":
-                self.send(200, json.dumps(dashboard.snapshot(), ensure_ascii=False))
-            elif parsed.path == "/api/projects":
-                self.send(200, json.dumps(dashboard.projects.snapshot(active=dashboard.project_running) if dashboard.projects else {"projects": {}, "scans": {}}, ensure_ascii=False))
-            elif parsed.path in ("/project-media", "/project-text"):
-                try:
-                    path = dashboard.projects.text_file(query["project"][0]) if parsed.path == "/project-text" else dashboard.projects.file(query["project"][0], int(query["section"][0]))
-                    if path is None:
-                        raise ValueError("file not present")
-                    if parsed.path == "/project-text":
-                        self.send(200, path.read_bytes(), "text/plain; charset=utf-8")
-                    else:
-                        self.media(path)
-                except CLIENT_DISCONNECTS:
-                    raise
-                except (OSError, ValueError, KeyError, IndexError, AttributeError):
-                    self.send(404, "file not found", "text/plain")
-            elif parsed.path == "/api/state" and dashboard.interactive:
-                self.send(200, dashboard.interactive.snapshot())
-            elif parsed.path in ("/media", "/text"):
-                try:
-                    rid, url = query["reader"][0], query["url"][0]
-                    c = next(c for c in dashboard.read(rid)["candidates"] if c["url"] == url)
-                    path = dashboard.text_path(rid, c) if parsed.path == "/text" else dashboard.audio_path(rid, c)
-                    if path is None:
-                        raise ValueError("file not present")
-                    if parsed.path == "/text":
-                        self.send(200, path.read_bytes(), "text/plain; charset=utf-8")
-                    else:
-                        self.media(path)
-                except CLIENT_DISCONNECTS:
-                    raise  # handled at the connection boundary, not as a missing file
-                except (OSError, ValueError, KeyError, StopIteration):
-                    self.send(404, "file not found", "text/plain")
-            else:
-                self.send(404, "not found", "text/plain")
-
-        def media(self, path):
-            with path.open("rb") as audio:
-                size = path.stat().st_size
-                start, end = 0, size - 1
-                header = self.headers.get("Range")
-                if header:
-                    match = re.fullmatch(r"bytes=([0-9]*)-([0-9]*)", header)
-                    if match and any(match.groups()):
-                        lo, hi = match.groups()
-                        start = int(lo) if lo else max(0, size - int(hi))
-                        end = min(size - 1, int(hi)) if lo and hi else size - 1
-                    if not match or not any(match.groups()) or start > end or start >= size:
-                        self.send_response(416)
-                        self.send_header("Content-Range", f"bytes */{size}")
-                        self.send_header("Content-Length", "0")
-                        self.end_headers()
-                        return
-                self.send_response(206 if header else 200)
-                self.send_header("Content-Type", mimetypes.guess_type(path.name)[0] or "application/octet-stream")
-                self.send_header("Accept-Ranges", "bytes")
-                self.send_header("Content-Length", str(max(0, end - start + 1)))
-                if header:
-                    self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
-                self.end_headers()
-                if self.command == "HEAD":
-                    return
-                audio.seek(start)
-                left = end - start + 1
-                try:
-                    while left > 0:
-                        chunk = audio.read(min(left, 65536))
-                        if not chunk:
-                            break
-                        self.wfile.write(chunk)
-                        left -= len(chunk)
-                except CLIENT_DISCONNECTS:
-                    self.close_connection = True
-
-        def do_POST(self):
-            # Mutations are same-origin JSON requests; the server binds only to loopback.
-            origin = self.headers.get("Origin")
-            if origin and origin != f"http://{self.headers.get('Host')}":
-                self.send(403, "cross-origin request refused", "text/plain")
-                return
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                if length < 0 or length > 1048576:
-                    raise ValueError("invalid body length")
-                body = json.loads(self.rfile.read(length) or b"{}")
-                if not isinstance(body, dict):
-                    raise ValueError("expected a JSON object")
-                action = self.path.removeprefix("/api/")
-                if action in ("start", "download_n"):
-                    dashboard.start(body.get("reader"), body.get("n"))
-                elif action in ("project_scan", "project_open", "project_download", "project_options"):
-                    dashboard.project_action(action, body)
-                elif action == "pause":
-                    dashboard.pause()
-                elif action == "rescan":
-                    dashboard.rescan(body.get("reader"))
-                elif action == "add_reader":
-                    dashboard.add_reader(body.get("value"), body.get("n", 10))
-                elif action == "scan_more" and not dashboard.interactive:
-                    dashboard.scan_more(body.get("reader"), body.get("n", 10))
-                elif action == "scan_more" and dashboard.interactive:
-                    if dashboard.rescanning:
-                        raise ValueError("wait for the metadata rescan to finish")
-                    with dashboard.interactive.lock:
-                        dashboard.interactive.target += max(0, int(body.get("n", 10)))
-                        dashboard.interactive.save()
-                    dashboard.interactive.wake.set()
-                    dashboard.ensure_interactive_workers()
-                else:
-                    dashboard.change(body.get("reader"), body.get("url"), action, body.get("decision"))
-                self.send(200, "{}")
-            except CLIENT_DISCONNECTS:
-                raise  # the operation may have succeeded; do not attempt another response
-            except (ValueError, TypeError, KeyError, OSError) as e:
-                self.send(400, str(e), "text/plain")
-
     return Handler
 
 
 def serve_dashboard(dashboard, port=8765, collect=False, browse=False):
-    with app.LocalServer(("127.0.0.1", port), make_handler(dashboard)) as server:
-        print(f"Dashboard: http://127.0.0.1:{server.server_port}/ (Ctrl+C to close)", flush=True)
-        dashboard.serving = True
-        if dashboard.interactive:
-            dashboard.ensure_interactive_workers()
-        elif collect:
-            dashboard.start()
-        elif browse:
-            dashboard.rescan()
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            dashboard.closing = True
-            dashboard.pause()
-            if dashboard.interactive:
-                dashboard.interactive.stop.set()
-                dashboard.interactive.wake.set()
-            workers = dashboard.threads + ([dashboard.worker] if dashboard.worker else [])
-            if any(worker.is_alive() for worker in workers):
-                print("Stopping collection after the current operation…", flush=True)
-            for worker in workers:
-                while worker.is_alive():
-                    worker.join(0.5)
+    from librivox_web import dashboard_component
+    component = dashboard_component(dashboard, collect=collect, browse=browse)
+    component.run("127.0.0.1", port,
+                  on_ready=lambda: print(f"Dashboard: http://127.0.0.1:{port}/ (Ctrl+C to close)", flush=True))

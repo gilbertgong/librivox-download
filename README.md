@@ -4,6 +4,9 @@ Collect a LibriVox reader's solo recordings, one sample per project, and review 
 Give it a JSON list of readers to collect samples sequentially, or browse and download complete projects for listening.
 Source books download by default when a recording links to Project Gutenberg. Python 3.12, standard library only.
 
+The dashboard also supports [hosting as a component in a shared console](docs/components.md).
+Its web framework is [vendored with its license](THIRD_PARTY.md); no package installation is required.
+
 ## Launch the dashboard
 
 From the repo root, run:

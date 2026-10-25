@@ -290,7 +290,7 @@ class DashboardTests(unittest.TestCase):
         dashboard = web.Dashboard(jobs=[self.job])
         with app.LocalServer(("127.0.0.1", 0), web.make_handler(dashboard)) as occupied, \
                 patch.object(dashboard, "start") as start:
-            with self.assertRaises(OSError):
+            with self.assertRaises(SystemExit):
                 web.serve_dashboard(dashboard, occupied.server_port, collect=True)
         start.assert_not_called()
 
