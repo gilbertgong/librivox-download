@@ -69,7 +69,12 @@ Open the printed address (default http://127.0.0.1:8765/). Collection starts aut
 open after all readers finish; Ctrl+C closes it. Use `--port 8766` if another instance uses the default port.
 The dry run validates and prints resolved jobs without writing output or contacting remote services.
 
-## Three dashboard pages
+## Three dashboard views
+
+Use the left sidebar to switch between Overview, Review and Projects. The session header and sidebar stay
+in place while the content changes, preserving entered values without a page reload. On narrow screens,
+the navigation appears above the content. Browser Back, bookmarks and reload retain the selected view
+and review filters.
 
 - **Overview:** reader names with smaller reader IDs below linking to their LibriVox pages, current activity/errors, and compact columns for
   Goal, Files, Duration, Premium and Bad. Files counts completed downloads still present, including bad files.

@@ -34,7 +34,7 @@ Browser checks use generated data and scratch sessions; no production collection
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
 by default; missing text joins 64 kbps and out-of-range length as a degraded fallback. The interactive script also
 provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
-manual entry and automatic batches use one JSON session and three-page dashboard. Empty JSON objects open
+manual entry and automatic batches use one JSON session and three-view dashboard. Empty JSON objects open
 reader entry; manual controls live with recordings on Review. console.py starts the picker or an explicit
 JSON session. The compatibility librivox_launch.py retains its old default session.local.json behavior.
 Explicit missing dashboard session paths create {}; headless/dry-run require existing valid files.
@@ -162,6 +162,10 @@ The existing tool's live LibriVox scanning works with normal default limits. Off
 cover decisions, individual request persistence, recovery from older state files, interrupted transfers,
 missing-file completion, quality fallback/retry, bulk selection rules and exclusive server binding.
 See the latest dated log entry for validation of the maintenance changes and its limits.
+
+The UI uses a persistent session header and left section navigation for Overview, Review and Projects.
+View links switch content in place; history tracks views and review filters. Native links remain usable
+for bookmarks, reload and opening another tab. Navigation becomes horizontal on narrow screens.
 
 ## Orientation
 

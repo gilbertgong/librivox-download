@@ -550,3 +550,12 @@ idle; no external requests or real recordings were used. The check server was st
 Existing Python 3.14 HTTPError fixture cleanup warnings remain non-failing. JavaScript syntax and whitespace
 checks pass. Updated README/AI/component docs, and refreshed provenance to the user's exact v0.1.2 runtime.
 No sessions, saved state, downloads, backup files or research data were migrated or deleted; no commit/push.
+
+## 2026-10-27 — Persistent layout and sidebar views
+
+Moved Overview, Review and Projects to left section navigation while retaining the existing controls,
+typography and tables. The session header and sidebar stay visible on desktop; narrow screens use
+horizontal navigation. Internal links switch views in place, preserve unsent form values and use browser
+history so Back, reload and reader-filter links work. Existing endpoints also support direct navigation.
+All 125 offline tests pass; JavaScript syntax checks and isolated browser checks cover view switching,
+unsent values, filter restoration through Back, reader-scoped links and reload. No downloads were started.
