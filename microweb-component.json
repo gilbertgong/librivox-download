@@ -1,0 +1,15 @@
+{
+  "component_api": 1,
+  "components": [
+    {
+      "id": "downloads",
+      "label": "Downloads",
+      "factory": "librivox_web:create_component",
+      "placement": "panel",
+      "order": 10,
+      "defaults": {
+        "collect": false
+      }
+    }
+  ]
+}

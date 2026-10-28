@@ -12,16 +12,33 @@ The HTTP layer now uses vendored microweb and a quiet `librivox_web.create_compo
 Standalone CLI and combined hosting share routes and lifecycle; controller/selection/download logic is
 unchanged. Prefix-aware frontend and media links support mounting. See [component and library contracts](../docs/components.md).
 No actual voice workbench is included here.
-All 114 tests pass on Python 3.12 and 3.14. Combined/standalone HTTP and mounted browser checks used
-generated audio and isolated state; no production collection or research work was used for verification.
+console.py is the primary source-checkout entry point. Application modules and frontend live under
+src/librivox_download/, with package-relative imports and no installation step. The root web adapter and
+legacy launch/fetch scripts are compatibility shims. The vendored microweb runtime remains at the root
+and currently matches released v0.1.2 exactly; see THIRD_PARTY.md.
+
+With no filename, console.py opens a session picker. It lists JSON files in the launch directory and
+sessions/ with validation status. New session creates a named file exclusively under sessions/; that
+folder and microweb.py.bak are ignored. UI-created configs explicitly retain ../downloads and disable
+auto collection. Existing explicit JSON paths retain their own config-relative output roots. The header
+names the active session with its full path on hover. Change session validates before pausing/draining
+owned work and swaps only the downloader controller; the web host and other components keep running.
+Newly opened sessions remain idle. Generation checks reject stale UI writes after switching.
+
+The component discovery manifest opens the same picker in the host-supplied settings directory, with
+collection disabled. Explicit session_file/review_root settings remain supported; review-only mode has
+no session switching. Existing session files, output directories, recordings and decisions are not migrated.
+All 125 tests pass on Python 3.12 and MSYS2/UCRT64 Python 3.14, including package portability and session creation/validation/draining/mounted tests.
+Browser checks use generated data and scratch sessions; no production collection or research work is used.
 
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
 by default; missing text joins 64 kbps and out-of-range length as a degraded fallback. The interactive script also
 provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
 manual entry and automatic batches use one JSON session and three-page dashboard. Empty JSON objects open
-reader entry; manual controls live with recordings on Review. librivox_launch.py is the main entry point;
-without a filename it uses session.local.json in the working directory. Normal dashboard launches create a
-missing session file containing {}; headless/dry-run commands require an existing file. The older single-reader CLI is a compatibility
+reader entry; manual controls live with recordings on Review. console.py starts the picker or an explicit
+JSON session. The compatibility librivox_launch.py retains its old default session.local.json behavior.
+Explicit missing dashboard session paths create {}; headless/dry-run require existing valid files.
+The older single-reader CLI is a compatibility
 launch into that same controller. Review-only startup loads saved state
 without starting collection. Projects adds full-reader catalog discovery and whole-project or credited-reader
 section downloads for listeners, independent of sampling state. Opened URLs are promoted to the top of the
@@ -148,15 +165,19 @@ See the latest dated log entry for validation of the maintenance changes and its
 
 ## Orientation
 
-- `librivox_fetch.py`: parsing/selection, State, scanner/downloader, compatibility single-reader CLI and legacy API.
+- `console.py`: primary standalone entry point and component export; legacy root scripts are small adapters.
+- `src/librivox_download/web.py`: mounted routes and lifecycle; `sessions.py`: picker and controller switching.
+- `tests/test_sessions.py`: session creation, invalid configs, draining/stale requests and copied-checkout portability.
+
+- `src/librivox_download/fetch.py`: parsing/selection, State, scanner/downloader, compatibility single-reader CLI and legacy API.
   `download_next` performs one bounded transfer; `downloader` runs explicit requests/active collections.
-- `librivox_dashboard.py` and `dashboard.html`: Overview/Review/Projects server, UI, local audio and decisions.
+- `src/librivox_download/dashboard.py` and its adjacent `dashboard.html`: Overview/Review/Projects server, UI, local audio and decisions.
 - `tests/test_librivox_fetch.py`: isolated standard-library tests with temporary output and local HTTP fixtures.
-- `librivox_launch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
-- `librivox_text.py`: source links, Gutenberg URL normalization, spaced mirror requests and shared text cache.
-- `librivox_projects.py`: whole-project metadata, saved library, full reader scans and scoped section downloads.
+- `src/librivox_download/launch.py`: validated JSON settings, resume checks, sequential reader lifecycle and final JSON summary.
+- `src/librivox_download/text.py`: source links, Gutenberg URL normalization, spaced mirror requests and shared text cache.
+- `src/librivox_download/projects.py`: whole-project metadata, saved library, full reader scans and scoped section downloads.
 - `tests/test_projects.py`: discovery, dramatic inclusion, scoped download/recovery, metadata preservation and HTTP/media.
-- `librivox_api.py`: official API lookup by ID or exact title plus URL identity, normalized sections.
+- `src/librivox_download/api.py`: official API lookup by ID or exact title plus URL identity, normalized sections.
 - `tests/test_api_rescan.py`: API matching/fallback, fresh scan bounds, preservation, concurrency and worker lifecycle.
 - `tests/test_texts.py`: offline mirror/provenance/retry, legacy enrichment and premium replacement checks.
 - `batch.example.json`: example defaults, reader overrides and output root; copy to an ignored `*.local.json`.
@@ -171,7 +192,7 @@ See the latest dated log entry for validation of the maintenance changes and its
 ## Known limitations
 
 - Reader listing/name and fallback HTML parsing still depend on site markup. Project details normally use the
-  API; inspect `librivox_api.py` and `read_project` if its schema changes.
+  API; inspect `src/librivox_download/api.py` and `read_project` if its schema changes.
 - Failed project checks are saved as skips. Explicit Rescan retries them; listing failures are reported without
   enabling bulk backups. Legacy scanner APIs remain for compatibility, outside the normal launch paths.
 - Completion checks confirm that the recorded file exists, not that MP3 content is valid or unmodified.

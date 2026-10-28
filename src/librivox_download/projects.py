@@ -12,7 +12,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-import librivox_fetch as app
+from . import fetch as app
 
 FIELDS = "{id,title,authors,language,genres,url_librivox,url_text_source,num_sections,sections}"
 

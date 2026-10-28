@@ -8,10 +8,11 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
-import librivox_dashboard as web
-import librivox_fetch as app
-import librivox_launch as launch
-import librivox_projects as projects
+import console  # source-checkout bootstrap
+from librivox_download import dashboard as web
+from librivox_download import fetch as app
+from librivox_download import launch as launch
+from librivox_download import projects as projects
 from test_librivox_fetch import serving
 from test_api_rescan import book
 

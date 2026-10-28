@@ -9,9 +9,10 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
-import librivox_launch as batch
-import librivox_dashboard as web
-import librivox_fetch as app
+import console  # source-checkout bootstrap
+from librivox_download import launch as batch
+from librivox_download import dashboard as web
+from librivox_download import fetch as app
 from test_librivox_fetch import candidate, serving
 
 

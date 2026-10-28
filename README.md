@@ -6,21 +6,36 @@ Source books download by default when a recording links to Project Gutenberg. Py
 
 The dashboard also supports [hosting as a component in a shared console](docs/components.md).
 Its web framework is [vendored with its license](THIRD_PARTY.md); no package installation is required.
+`microweb-component.json` also enables local discovery by optional shell launchers, with automatic collection disabled.
 
 ## Launch the dashboard
 
 From the repo root, run:
 
 ```sh
-python -B librivox_launch.py
+python -B console.py
 ```
 
-This uses `session.local.json` in the current working directory, creating it with `{}` if missing. Supply
-another filename, such as `python -B librivox_launch.py manual.local.json`, to use a separate session; a
-missing named file is also created. Its parent directory must already exist. Existing files are preserved,
-and invalid JSON is reported rather than replaced. Dry runs and headless runs require an existing valid file.
-The default filename is ignored by Git, as are other `*.local.json` files. Dashboard startup prints the full
-settings-file path; newly created files also print their initial `{}` contents.
+Without a filename, the console opens a session picker. Choose an existing JSON file or use **New session**
+and enter a filename (default `session.local.json`). New files live under `sessions/` in the directory you
+launched from; that directory is ignored by Git. The picker also lists JSON files directly in the launch
+directory, including existing batch files, and reports invalid configurations. Existing files are never replaced.
+A `.json` extension is added to new names if omitted.
+
+The header shows **Session: filename**; hover for the full path. **Change session** opens the picker again.
+Opening a session pauses current work, waits for the current operation to finish, and loads the selected
+configuration without restarting the server or other hosted components. Recordings and decisions stay saved.
+Sessions opened from the picker stay idle until you explicitly collect or scan.
+
+To launch a particular session directly, use `python -B console.py sessions/my-readers.json` or an existing
+JSON path anywhere else. An explicit missing file is created as `{}` if its parent directory exists.
+Invalid existing files are reported rather than replaced. Dry runs and headless runs require an explicit,
+existing valid file. Startup prints the full settings-file path.
+
+New sessions created through the picker set `auto_collect: false` and `output_root: "../downloads"`, so
+recordings still go under the launch directory's `downloads/`, outside `sessions/`. Existing configurations
+keep their own paths: relative output roots are always resolved against the JSON file's directory. Set distinct
+output roots if separate sessions need independent libraries or different selection settings.
 
 Overview opens with **Add a reader**: enter a reader URL or ID and a collection goal. The dashboard saves it
 in that JSON file. Follow the reader's name to **Review**, where the controls above their recordings let you:
@@ -36,8 +51,8 @@ The first reader added to an empty session sets `auto_collect` to `false`, so re
 `{"readers": []}` also works; use a valid JSON object rather than a zero-byte file. A populated batch still
 collects automatically by default. Add `"auto_collect": false` to keep it manual, or use `--browse` for a
 single launch without automatic collection. Reader additions and Total changes are saved to the manifest;
-other settings and `_ignore` notes are preserved. If the JSON changes outside the dashboard, restart to load
-those edits before changing readers or totals through the UI. One worker runs collection, scanning or an
+other settings and `_ignore` notes are preserved. If the JSON changes outside the dashboard, use **Change session**
+to reopen that file before changing readers or totals through the UI. One worker runs collection, scanning or an
 individual download at a time; Pause stops after the current operation. Listening decisions remain available.
 
 ## Collect a batch
@@ -46,8 +61,8 @@ Copy [batch.example.json](batch.example.json) to `batch.local.json`, replace the
 these commands from the repo root:
 
 ```sh
-python -B librivox_launch.py batch.local.json --dry-run
-python -B librivox_launch.py batch.local.json
+python -B console.py batch.local.json --dry-run
+python -B console.py batch.local.json
 ```
 
 Open the printed address (default http://127.0.0.1:8765/). Collection starts automatically. The dashboard stays
@@ -122,7 +137,7 @@ saved Projects library and local players, with scanning and download controls un
 ## Reopen for review
 
 ```sh
-python -B librivox_launch.py --review downloads
+python -B console.py --review downloads
 ```
 
 The path may be an output root containing reader folders, a single reader directory, or a `state.json` file.
@@ -237,7 +252,7 @@ extract chapters or establish that every spoken word matches the downloaded edit
 For an assistant or script that needs a command which exits when collection finishes:
 
 ```sh
-python -B librivox_launch.py batch.local.json --headless > batch-summary.local.json
+python -B console.py batch.local.json --headless > batch-summary.local.json
 ```
 
 Progress goes to stderr and the final JSON summary goes to stdout. In a terminal the download counter updates
@@ -275,7 +290,10 @@ Keep is a listening annotation, not a download prerequisite. Listening judgments
 Resuming with degraded downloads searches for premium replacements, preserving earlier files and decisions;
 the downloaded count can exceed the target. Completed collections stay idle until explicitly resumed.
 
-## Older single-reader command
+## Older commands
+
+`python librivox_launch.py` remains a compatibility launcher, including its old no-argument behavior of
+opening or creating `session.local.json` in the working directory.
 
 Existing `python librivox_fetch.py "NAME" READER_URL` commands remain compatible, including their existing
 options and output location. They now launch the same collection controller and Review controls as JSON

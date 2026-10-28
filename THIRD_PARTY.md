@@ -1,12 +1,11 @@
 # Third-party code
 
-`microweb.py` is vendored from [gilbertgong/microweb](https://github.com/gilbertgong/microweb), a standard-library
-HTTP framework and optional local console shell. Its BSD 2-Clause notice is retained inside the file.
+`microweb.py` is vendored from [gilbertgong/microweb](https://github.com/gilbertgong/microweb),
+release [v0.1.2](https://github.com/gilbertgong/microweb/tree/v0.1.2). Its BSD 2-Clause notice is retained
+inside the file. The vendored file matches that tagged release byte-for-byte.
 
-This is the development snapshot used for component integration on 2026-10-25, not a tagged release.
-It includes Component, Shell.add, request draining and shared standalone/combined lifecycle support.
-No pip dependency or automatic update is introduced. Update upstream first, copy its exact file and rerun
-the downloader suite before adopting another snapshot. The embedded development version has no release
-update URL; it is not an automatically updatable published release.
+SHA-256: `ae72f0eb51cacd5b6a4be2c3f176962be5ba321bf7bcf71537c174c3c4b93b45`.
 
-Snapshot SHA-256: `da6a21000995e4656d0fa4eb80ebf50e5a0bb6528e68224abb43039833317f15`.
+The user adopted this release using its explicit updater. Normal import/startup never checks or updates.
+Its updater preserves the previous file as microweb.py.bak; that local backup is ignored by Git and is
+not distributed. After adopting another release, rerun the downloader suite and refresh this provenance.

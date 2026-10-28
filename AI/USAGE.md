@@ -21,9 +21,20 @@ Prerequisite: a local checkout and permission to run a Python interpreter.
 2. Use an existing suitable interpreter. If none exists, explain that Python must be installed and follow the
    user's environment preferences. No third-party Python dependencies, virtual environment, model weights or
    build tools are required.
-3. From the repo root run `python -B librivox_launch.py --help` with that interpreter.
+3. From the repo root run `python -B console.py --help` with that interpreter.
 
 Success: help exits successfully. Do not install unrelated audio/AI libraries.
+
+## Check / update the vendored web runtime
+
+Only on explicit request: `python microweb.py --check-update` reads the upstream release manifest
+without changing files. `python microweb.py --update` installs its release, including over local edits,
+after checking downloaded checksum/version/syntax and preserving current bytes in microweb.py.bak.
+An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
+The vendored file currently matches upstream v0.1.2 exactly; this release still refuses local modifications
+when installing updates. Later upstream releases changed that policy. Do not patch or update it silently.
+An authorized upgrade should be followed by the offline downloader tests and provenance refresh in
+THIRD_PARTY.md. Startup/import never performs automatic checks or updates.
 
 ## Run smoke test / test
 
@@ -42,12 +53,14 @@ Success: every test passes. No existing download directory has been used as a fi
 Prerequisites: setup; a writable session directory and free loopback port. Internet access is needed only
 when the user requests metadata, remote previews or downloads. Use documented selection defaults.
 
-1. Launch `python -B librivox_launch.py [SESSION.local.json] [--port PORT]`. With no filename it uses
-   session.local.json in the current working directory. A normal dashboard launch creates a missing file
-   containing {}; existing files are preserved. Check which file will be used before launching: an existing
-   populated session may collect automatically. Use a separate scratch directory/filename for tests.
-   Dry runs and headless runs require an existing valid file and never create one.
-   For existing configurations use `--browse` to open without automatic collection, or honor `auto_collect`.
+1. Launch `python -B console.py [SESSION.json] [--port PORT]`. Without a filename, use Open session
+   or New session. New filenames are created exclusively under launch-directory sessions/ (ignored),
+   with .json appended if needed. Existing JSON files in sessions/ and the launch directory are listed
+   with validation errors; do not overwrite invalid or existing files. New UI-created sessions default to
+   auto_collect=false and output_root=../downloads, retaining the launch-directory downloads location.
+   Explicit CLI files retain their own relative output paths and startup auto_collect behavior; --browse
+   suppresses it. Headless/dry-run require an explicit existing file. The legacy librivox_launch.py
+   wrapper retains its older default session.local.json behavior.
 2. On Overview, Add a reader accepts a LibriVox URL or ID and target, saves it to the session, and stays idle.
    Follow the reader link to Review. Browse / rescan finds candidates without audio/text downloads.
 3. Review provides per-reader Total, Collect / resume, Scan 10 more and Pause, plus per-card Download and
@@ -55,7 +68,7 @@ when the user requests metadata, remote previews or downloads. Use documented se
    records the user's judgments. Never invent listening decisions.
 4. Manual controls use one sequential worker; wait for completion or pause before starting another operation.
    Reader additions and target changes persist in JSON; `_ignore` and other settings survive. External JSON
-   edits require a restart before further UI configuration writes. An initially empty session saves
+   edits require reopening the file via Change session before further UI configuration writes. An initially empty session saves
    auto_collect=false after its first addition, so future launches remain manual.
 5. Leave scanning at normal limits. Do not survey a catalog or increase targets unless requested.
 
@@ -110,10 +123,10 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
 3. Set `output_root` explicitly if the user chose a destination. Relative paths are relative to the JSON file.
    If operating under a role with read-only repository access, place both JSON and output outside the repo and
    invoke Python with `-B`. Respect that role's authorization boundaries for data collection.
-4. Run `python -B librivox_launch.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
+4. Run `python -B console.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
    This validates the entire configuration without writing output or contacting remote services. Check that no
    other job is using the same output directories before starting actual collection.
-5. If the user wants a browsable dashboard, run `python -B librivox_launch.py PATH_TO_BATCH [--port PORT]` and open
+5. If the user wants a browsable dashboard, run `python -B console.py PATH_TO_BATCH [--port PORT]` and open
    the printed loopback URL. Collection starts automatically unless auto_collect is false or --browse is supplied. Overview shows progress and explicit collection/
    pause controls; Review shows all saved candidates and decisions. The server remains available after completion.
    If the request is for unattended command execution, use `--headless` so it exits when collection finishes.
@@ -141,7 +154,7 @@ Prerequisites: setup and the user's existing output root, reader directory or st
 access, migration or new index is needed. This request authorizes opening the dashboard; it doesn't authorize
 making subjective listening decisions or collecting replacements unless the user requests those actions.
 
-1. Run `python -B librivox_launch.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
+1. Run `python -B console.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
    the root state file or immediate reader subdirectories. An empty root is supported; duplicate reader IDs
    require opening the intended reader directory explicitly. Legacy saved state can be reviewed without conversion.
 2. Overview shows saved readers, counts and last status. Review links preserve the reader selection. Review
@@ -231,7 +244,29 @@ there is no alignment, conversion or packaging step. Ordinary page startup does 
 
 ## Host as a component
 
-Follow docs/components.md. Use an absolute session_file or review_root, or resolve it against settings_dir.
+Follow docs/components.md. Omit session_file/review_root for the picker, or supply one absolute path
+(or resolve a relative path against settings_dir). The host settings directory is the launch-directory
+equivalent for the picker and its sessions/ subdirectory.
 For a smoke check use a fresh scratch session and collect=false. Construction must not write files or start
 workers; startup follows socket binding. Check mounted navigation, decisions and local playback, then close
 the host and verify owned collection services stop. Do not use a live production library for integration tests.
+
+
+## Open / create / switch sessions
+
+The session strip identifies the active JSON file; hover for its full path. New session accepts a filename,
+not an arbitrary path, and never overwrites. Open session accepts a listed file; invalid JSON must leave the
+current session intact. Switching pauses old work and drains its owned worker before replacing only the
+downloader controller. It stays on the same browser URL and does not restart a shared host or other tools.
+The UI reports the pending session while waiting and starts the new session idle, regardless of auto_collect.
+Existing state, downloads and decisions are preserved. Stale UI mutations carry a session generation and
+are rejected after a switch; panels discard old audio/card caches. Review-only launches do not offer switching.
+For checks use scratch sessions/output; do not switch a live user collection unless that action is requested.
+
+## Source layout
+
+console.py is the thin primary entry point and exposes create_component. The named application package
+is under src/librivox_download/ (launch, web, dashboard, sessions, fetch, api, projects, text, dashboard.html).
+The root microweb.py stays directly vendored and updatable. Legacy launch/fetch scripts and librivox_web.py
+are small compatibility adapters; keep factory imports quiet and use package-relative imports internally.
+No package installation is needed when running console.py from a source checkout, even from another directory.

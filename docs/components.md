@@ -1,6 +1,6 @@
 # Standalone and combined consoles
 
-The normal `librivox_launch.py` dashboard uses the same mountable application and component lifecycle
+The normal `console.py` dashboard uses the same mountable application and component lifecycle
 as a combined console. Collection, saved state, review decisions and project downloads retain their existing
 controller. Headless collection and dry runs remain independent of the web host.
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from librivox_web import create_component
 from microweb import Shell
 
-downloads = create_component({"session_file": Path("my-session.json").resolve(), "collect": False})
+downloads = create_component({"settings_dir": Path("my-data").resolve(), "collect": False})
 shell = Shell(title="Tools")
 shell.add(downloads, prefix="/downloads")
 shell.run("127.0.0.1", 8765)
@@ -25,10 +25,11 @@ without installation. Other tools should use their own package namespaces.
 |---|---|
 | `session_file` | JSON session, created as `{}` at startup if missing; its parent must already exist |
 | `review_root` | Existing library, reader directory or state.json to review; alternative to session_file |
-| `settings_dir` | Absolute directory for resolving a relative session_file/review_root |
+| `settings_dir` | Absolute directory for relative settings paths and the session picker; defaults to launch directory when no path is supplied |
 | `collect` | Startup collection; false disables it; omitted follows the session's existing auto_collect setting |
 
-Supply exactly one of session_file or review_root. Review defaults to no automatic collection. Factories
+Omit both session_file/review_root for Open/New session inside the panel, or supply one to select it at startup.
+Review defaults to no automatic collection and disables session switching. Factories
 do not create files, initialize the controller, bind sockets or start workers. Initialization happens after
 binding. A missing/invalid configuration fails startup and the host cleans up components already started.
 
@@ -39,6 +40,34 @@ On shutdown the host drains accepted requests, then the component requests pause
 collection services to finish their current operation. Saved intent and files remain. It does not stop other
 consoles, external workers or training processes. An occupied port fails before component workers start.
 The compatibility `make_handler(dashboard)` remains available, delegating to these same routes.
+
+## Optional discovery launcher
+
+The repository also ships `microweb-component.json` for optional consoles that scan installed checkout folders.
+Clone this repository under such a console's components/ directory and restart that launcher. Its manifest
+mounts the factory as `downloads` with `collect: false` and opens the session picker by default.
+The root declares component_api 1 and a components array containing one panel with order 10. A single
+repository may provide several components; other tools can supply panels or shared banners in the same host.
+The host supplies settings_dir outside the checkout; no dependency installation or network acquisition is
+performed by discovery. Startup data creation follows binding. This does not change the normal standalone CLI.
+
+## Sessions and source package
+
+console.py exposes the primary factory, backed by src/librivox_download/web.py and the named application
+package. The root librivox_web.py is retained as a quiet adapter for existing discovery/explicit launchers.
+The root microweb runtime remains separate; no package installation or duplicate framework import is needed.
+
+For the picker, settings_dir takes the place of a standalone launch directory. Existing JSON files there
+and in its sessions/ subdirectory are listed. New named sessions are created only under sessions/, with
+output_root=../downloads and auto_collect=false. Explicit session_file paths retain their existing semantics.
+The directory must exist when opening an existing configuration; creation of sessions/ follows a user action.
+
+POST api/session_open selects a listed path; api/session_new creates a basename (adding .json if omitted).
+Both validate before pausing the current controller, then asynchronously stop/join owned workers and replace
+only this component's controller. api/dashboard exposes session.active/name/files/directory, switching/pending,
+error and generation. UI mutations include session_generation so late requests cannot mutate a new session.
+The new controller starts idle. Recordings, saved state and decisions remain in their existing output roots.
+The host, other components and the browser URL stay running; component shutdown also joins a pending switch.
 
 ## Read-only library interface, revision 1
 

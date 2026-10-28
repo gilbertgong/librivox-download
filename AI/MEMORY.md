@@ -82,3 +82,16 @@ git-ignored and machine-specific), check whether it exists. Prefer a scratch pat
 the existing file aside and restore it in the same step.
 
 *Why:* a test once overwrote and then deleted a config file the user had just saved, and it had to be recreated.
+
+
+## Console and sessions
+
+Use console.py as the primary entry point; keep implementation in src/librivox_download/ and the vendored
+microweb.py at the root. Keep legacy launchers as thin compatibility adapters. Ordinary console startup
+without a JSON argument opens a picker; it must not silently select or create a session. New session accepts
+a filename and creates exclusively under launch-directory sessions/, which is ignored. Existing JSON files
+in that directory and the launch directory remain selectable. Session switching is inside the downloader
+panel and drains old work before replacing only its controller, preserving files and decisions.
+
+*Why:* the user wants a clean root entry point and seamless standalone/shared hosting, with explicit session
+selection, visible active filenames and no server restart when switching.

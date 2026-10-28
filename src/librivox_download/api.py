@@ -9,7 +9,7 @@ import math
 import re
 import urllib.parse
 
-import librivox_text as texts
+from . import text as texts
 
 ENDPOINT = "https://librivox.org/api/feed/audiobooks/"
 PAGE_SIZE = 10

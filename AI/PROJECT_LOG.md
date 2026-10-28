@@ -494,3 +494,59 @@ Final validation: all 114 tests pass on Python 3.12 and 3.14; Python 3.14 still 
 fixture cleanup ResourceWarnings. The mounted browser check found and fixed a root-relative per-reader
 review link. Navigation, local playback and the synthetic downstream task then worked under the shared shell.
 The vendored runtime matches the upstream development file byte-for-byte; syntax/link/LF/whitespace checks pass.
+
+## 2026-10-25 — Component discovery manifest
+
+After checkpointing the adapter, added microweb-component.json for optional local discovery consoles. It identifies
+the existing factory and defaults to a settings-relative session.json with collect=false. No controller,
+standalone CLI, dependency installation or network behavior changed. A test verifies that the shipped manifest's
+factory/defaults construct quietly and start in an isolated host settings directory.
+The manifest uses a components array (one panel here, order 10); a host can combine it with several components
+from another repo. Refreshed the vendored development runtime for optional banner placement and updated its
+checksum. 115 tests pass on Python 3.12 and 3.14; isolated browser checks show the downloader and its Review
+page under a shared synthetic Machine banner. Existing Python 3.14 HTTPError fixture ResourceWarnings remain.
+
+
+## 2026-10-27 — Updater-only bootstrap for an explicit upgrade test
+
+The user wants to test microweb's updater rather than replace the complete runtime. Its integration
+snapshot still had a numeric-only parser despite a prefixed label and partial manual updater edits.
+Patched only the updater section to accept vMAJOR.MINOR.PATCH and explicitly upgrade locally edited
+files with an exact-byte backup, validating incoming checksum/version/syntax without requiring old-release
+bytes. Framework code and v0.1.0 label remain as before. The user will perform the actual upgrade;
+no --update was run here. THIRD_PARTY and assistant usage describe this temporary patched-snapshot state.
+All 115 downloader tests and all 12 upstream updater tests pass against this copy under MSYS2 Python3.14.
+
+
+## 2026-10-27 — Console entry point, source package and selectable sessions
+
+The user agreed to console.py as the primary standalone entry point, application implementation under
+src/, JSON session selection in the UI, and a sessions/ directory with named creation. Moved implementation
+and frontend into src/librivox_download/ with relative imports. Root console.py bootstraps the source
+checkout and exports the component factory; legacy launch/fetch commands and the uniquely named web
+adapter remain thin compatibility shims. The vendored microweb.py stays at the root. Selection/download
+algorithms and existing saved-data paths are preserved; the legacy fetch default still points to root downloads/.
+
+Without a filename console.py opens a picker, writing nothing. Existing JSON files from the launch directory
+and sessions/ are listed with validation status. New named sessions are exclusively created in sessions/,
+adding .json if omitted, with auto_collect=false and output_root=../downloads. That preserves the normal
+launch-directory downloads location; existing configs retain their file-relative output semantics. sessions/
+and microweb.py.bak are ignored. Explicit CLI JSON still supports automatic collection, browse, dry-run and
+headless operations. The old launcher retains its no-argument session.local.json behavior.
+
+The header displays the active filename with full path on hover. Change session validates first, then
+pauses and joins old work asynchronously before swapping only the downloader controller. The server,
+browser URL and other mounted components stay running. New UI-opened sessions remain idle even if their
+saved auto_collect is true. Session generations reject stale UI writes; frontend card/audio/project state
+resets on a switch. Shutdown joins pending transitions, and failed transition reloads leave the old session
+available and paused. Review-only launches, including empty libraries, do not allow switching. The discovery
+manifest now opens the picker by default using the host's settings directory; explicit session settings remain.
+
+All 125 tests pass on Python 3.12 and Python 3.14 (including MSYS2). New tests cover config validation,
+exclusive naming/path bounds, no-write startup, staged worker draining, failure recovery, stale writes,
+mounted routes, read-only mode and an isolated copied checkout with site packages disabled. Browser checks
+created and reopened scratch sessions, rejected unrelated JSON and switched between configs while remaining
+idle; no external requests or real recordings were used. The check server was stopped after verification.
+Existing Python 3.14 HTTPError fixture cleanup warnings remain non-failing. JavaScript syntax and whitespace
+checks pass. Updated README/AI/component docs, and refreshed provenance to the user's exact v0.1.2 runtime.
+No sessions, saved state, downloads, backup files or research data were migrated or deleted; no commit/push.

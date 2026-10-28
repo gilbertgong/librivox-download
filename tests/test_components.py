@@ -7,8 +7,9 @@ import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
-import librivox_dashboard as dashboard
-import librivox_web as web
+import console  # source-checkout bootstrap
+from librivox_download import dashboard as dashboard
+from librivox_download import web as web
 from microweb import Shell
 from test_librivox_fetch import candidate
 
@@ -18,6 +19,24 @@ class ComponentTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+
+    def test_shipped_manifest_constructs_the_factory_with_defaults(self):
+        manifest = json.loads(Path(console.__file__).with_name('microweb-component.json').read_text(encoding='utf-8'))
+        self.assertEqual(manifest['component_api'], 1)
+        manifest = manifest['components'][0]
+        self.assertEqual(manifest['factory'], 'librivox_web:create_component')
+        component = web.create_component({**manifest['defaults'], 'settings_dir': self.root})
+        self.assertEqual(component.id, manifest['id'])
+        self.assertEqual(list(self.root.iterdir()), [])
+        component.start()
+        try:
+            snapshot = json.loads(component.app.handle('GET', '/api/dashboard')[2])
+            self.assertIsNone(snapshot['session']['active'])
+            self.assertTrue(snapshot['session']['enabled'])
+            self.assertFalse(snapshot['running'])
+            self.assertEqual(list(self.root.iterdir()), [])
+        finally:
+            component.stop()
 
     def test_factory_and_bind_failure_make_no_files_or_workers(self):
         session = self.root / 'session.json'
@@ -54,7 +73,7 @@ class ComponentTests(unittest.TestCase):
         component = web.create_component({'review_root': self.root})
         shell = Shell()
         shell.add(component, '/downloads')
-        with patch('librivox_fetch.get', side_effect=AssertionError('unexpected network')):
+        with patch('librivox_download.fetch.get', side_effect=AssertionError('unexpected network')):
             component.start()
             try:
                 for route in ['/', '/review', '/projects']:

@@ -12,7 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import librivox_fetch as app
+import console  # source-checkout bootstrap
+from librivox_download import fetch as app
 
 
 @contextlib.contextmanager

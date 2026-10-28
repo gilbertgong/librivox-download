@@ -69,8 +69,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-__version__ = "v0.1.0"
-UPDATE_URL = ""  # Set by scripts/release.sh to the raw manifest on main.
+__version__ = "v0.1.2"
+UPDATE_URL = "https://raw.githubusercontent.com/gilbertgong/microweb/main/microweb.version"
 
 # Copyright (c) 2026, Gilbert Gong
 # Redistribution and use in source and binary forms, with or without
@@ -589,10 +589,17 @@ class Shell(App):
     header { padding:16px 24px; background:#fff; border-bottom:1px solid #dce1ea }
     nav { display:flex; flex-wrap:wrap; gap:16px; align-items:center }
     a { color:#2457aa } nav strong { margin-right:12px }
-    main { max-width:900px; margin:40px auto; padding:0 24px }
-    .tools { display:flex; gap:16px; flex-wrap:wrap }
-    .tool { padding:24px; background:#fff; border:1px solid #dce1ea; border-radius:8px }
-    iframe { width:100%; flex:1; border:0; background:white }
+    main { max-width:1120px; margin:40px auto; padding:0 24px }
+    .component-table { overflow-x:auto }
+    table { width:100%; border-collapse:collapse; background:#fff }
+    th,td { padding:16px; text-align:left; border-bottom:1px solid #dce1ea }
+    th { font-size:13px; color:#57657a; background:#edf1f7 }
+    td code,.muted { font-size:13px; color:#57657a }
+    nav a[aria-current] { font-weight:600 }
+    iframe { width:100%; border:0; background:white }
+    iframe.panel { flex:1; min-height:0 }
+    iframe.banner { display:block; flex-shrink:0; border-bottom:1px solid #dce1ea }
+    header { flex-shrink:0 }
     body.focus { height:100vh; display:flex; flex-direction:column }
     """
 
@@ -600,18 +607,32 @@ class Shell(App):
         super().__init__(**kwargs)
         self.title = title
         self.tools = {}
+        self.banners = {}
+        self._entries = {}
         self.get("/")(self._home)
 
-    def mount(self, prefix, app, label=None):
+    def mount(self, prefix, app, label=None, *, description=""):
         super().mount(prefix, app)
         self.tools[prefix.rstrip("/")] = label or prefix.strip("/")
+        self._entries[prefix.rstrip("/")] = dict(id=prefix.strip("/"),
+            label=label or prefix.strip("/"), description=description, placement="panel")
         return app
 
-    def add(self, component, prefix):
+    def add(self, component, prefix, *, placement="panel", height=96, description=""):
         """Mount an app and explicitly register its lifecycle. Construction is quiet."""
         if any(c.id == component.id or c is component for c in self.components):
             raise ValueError("duplicate component id")
-        self.mount(prefix, component.app, label=component.label)
+        if placement not in ("panel", "banner"):
+            raise ValueError("placement must be panel or banner")
+        if type(height) is not int or height <= 0:
+            raise ValueError("height must be a positive integer in pixels")
+        if placement == "banner":
+            super().mount(prefix, component.app)
+            self.banners[prefix.rstrip("/")] = (component.label, height)
+        else:
+            self.mount(prefix, component.app, label=component.label)
+        self._entries[prefix.rstrip("/")] = dict(id=component.id, label=component.label,
+            description=description, placement=placement)
         self.components.append(component)
         return component
 
@@ -621,35 +642,56 @@ class Shell(App):
             raise HTTPError(404, "unknown tool")
         title = html.escape(self.title)
         home = html.escape(req.url(), quote=True)
-        links, cards = [], []
+        links = []
         for prefix, label in self.tools.items():
             href = html.escape(req.url() + "?" + urllib.parse.urlencode({"tool": prefix}), quote=True)
-            link = f'<a href="{href}">{html.escape(label)}</a>'
+            current = ' aria-current="page"' if selected == prefix else ''
+            link = f'<a href="{href}"{current}>{html.escape(label)}</a>'
             links.append(link)
-            cards.append(f'<div class="tool">{link}</div>')
         if selected:
             src = html.escape(req.url(selected + "/"), quote=True)
-            content = f'<iframe title="{html.escape(self.tools[selected], quote=True)}" src="{src}"></iframe>'
+            content = f'<iframe title="{html.escape(self.tools[selected], quote=True)}" src="{src}" class="panel"></iframe>'
         else:
-            content = f'<main><h1>{title}</h1><div class="tools">' + "".join(cards) + '</div>'
-            if not cards:
+            content = '<main><h1>Components</h1><p>Registered views in this console.</p>'
+            if self._entries:
+                content += ('<div class="component-table"><table><thead><tr>'
+                            '<th scope="col">Component</th><th scope="col">Purpose</th>'
+                            '<th scope="col">Placement</th><th scope="col">Mount</th>'
+                            '</tr></thead><tbody>')
+                for prefix, entry in self._entries.items():
+                    mount = req.url(prefix + "/")
+                    url = (mount if entry["placement"] == "banner" else
+                           req.url() + "?" + urllib.parse.urlencode({"tool": prefix}))
+                    content += ('<tr><td><strong><a href="' + html.escape(url, quote=True) + '">' +
+                                html.escape(entry["label"]) + '</a></strong><br><code>' +
+                                html.escape(entry["id"]) + '</code></td><td>' +
+                                html.escape(entry["description"] or "—") + '</td><td>' +
+                                ('Shared banner' if entry["placement"] == "banner" else 'Panel') +
+                                '</td><td><code>' + html.escape(mount) + '</code></td></tr>')
+                content += '</tbody></table></div><p class="muted">This lists registrations, not component health checks.</p>'
+            else:
                 content += '<p>No tools registered yet. Mount an App to add one.</p>'
             content += '</main>'
+        banners = ''.join(
+            f'<iframe class="banner" title="{html.escape(label, quote=True)}" '
+            f'src="{html.escape(req.url(prefix + "/"), quote=True)}" style="height:{height}px"></iframe>'
+            for prefix, (label, height) in self.banners.items())
         page = (f'<!doctype html><html lang="en"><meta charset="utf-8">'
                 f'<meta name="viewport" content="width=device-width,initial-scale=1">'
                 f'<title>{title}</title><style>{self.STYLE}</style>'
-                f'<body class="{"focus" if selected else "home"}"><header><nav>'
-                f'<strong><a href="{home}">{title}</a></strong>' + "".join(links) +
-                '</nav></header>' + content + '</body></html>')
+                f'<body class="{"focus" if selected else "home"}"><header><nav aria-label="Primary navigation">'
+                f'<strong><a href="{home}"' + (' aria-current="page"' if selected is None else '') +
+                f'>{title}</a></strong>' + "".join(links) +
+                '</nav></header>' + banners + content + '</body></html>')
         return Response(page, content_type="text/html; charset=utf-8")
 
 
 # Explicit version checks and vendored-file updates --------------------------
 
 def _version_parts(version):
-    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
-        raise ValueError("release versions must be MAJOR.MINOR.PATCH")
-    return tuple(int(part) for part in version.split("."))
+    if not re.fullmatch(r"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
+        raise ValueError("release versions must be vMAJOR.MINOR.PATCH")
+    return tuple(int(part) for part in version[1:].split("."))
 
 
 def _download(url):
@@ -688,7 +730,7 @@ def install_update(manifest, target=None):
     target = Path(target or __file__).resolve()
     if "/main/" not in UPDATE_URL:
         raise ValueError("expected a raw GitHub manifest on main")
-    old_url = UPDATE_URL.replace("/main/", f"/refs/tags/v{__version__}/", 1)
+    old_url = UPDATE_URL.replace("/main/", f"/refs/tags/{__version__}/", 1)
     old_manifest = json.loads(_download(old_url))
     original = target.read_bytes()
     if hashlib.sha256(original).hexdigest() != old_manifest["sha256"]:

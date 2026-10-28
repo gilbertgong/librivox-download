@@ -7,8 +7,8 @@ import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
 
-import librivox_fetch as app
-import librivox_projects as projects
+from . import fetch as app
+from . import projects as projects
 
 CLIENT_DISCONNECTS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
@@ -38,6 +38,7 @@ class Dashboard:
         self.scan_thread = None
         self.download_thread = None
         self.interactive = interactive
+        self.review_only = False
         self.threads = []
         if interactive:
             self.states[interactive.rid] = interactive
@@ -64,7 +65,9 @@ class Dashboard:
                 raise ValueError(f"duplicate reader {rid}; open its reader directory separately")
             paths[rid] = path
         project_root = root.parent.parent if root.is_file() else root.parent if (root / "state.json").is_file() else root
-        return cls(paths=paths, project_root=project_root)
+        view = cls(paths=paths, project_root=project_root)
+        view.review_only = True
+        return view
 
     def read(self, rid):
         with self.lock:
@@ -151,7 +154,7 @@ class Dashboard:
 
     def project_action(self, action, body):
         """Use the same operation slot as sampling; never run two collection writers at once."""
-        import librivox_launch as launch
+        from . import launch as launch
         with self.lock:
             if not self.projects or not (self.manifest or self.jobs):
                 raise ValueError("open a JSON session to scan or download projects")
@@ -217,10 +220,10 @@ class Dashboard:
 
     def save_manifest(self, data):
         """Validate before replacing; don't overwrite edits made outside this dashboard."""
-        import librivox_launch as batch
+        from . import launch as batch
         jobs = batch.load_batch(self.manifest, data)
         if json.loads(self.manifest.read_text(encoding="utf-8")) != self.manifest_data:
-            raise ValueError("JSON file changed outside the dashboard; restart to load those changes")
+            raise ValueError("JSON file changed outside the dashboard; reopen it with Change session to load those changes")
         temporary = self.manifest.with_suffix(self.manifest.suffix + ".tmp")
         temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
         temporary.replace(self.manifest)
@@ -229,7 +232,7 @@ class Dashboard:
         self.paths.update({rid: Path(job["out"]) / "state.json" for rid, job in self.jobs.items()})
 
     def add_reader(self, value, count):
-        import librivox_launch as batch
+        from . import launch as batch
         with self.lock:
             if not self.manifest or self.running:
                 raise ValueError("reader entry requires an idle JSON dashboard")
@@ -245,7 +248,7 @@ class Dashboard:
             self.save_manifest(data)
 
     def set_count(self, rid, count):
-        import librivox_launch as batch
+        from . import launch as batch
         batch.positive(count, "count", integer=True)
         if rid not in self.jobs:
             raise ValueError("unknown reader")
@@ -315,7 +318,7 @@ class Dashboard:
                 self.results[job["reader_id"]] = {"status": "waiting"}
 
             def work():
-                import librivox_launch as batch
+                from . import launch as batch
                 try:
                     summary = batch.run_batch(jobs, on_state=self.register, on_result=self.finished,
                                               stop=self.stop, state_factory=self.state_factory)
@@ -345,7 +348,7 @@ class Dashboard:
 
     def rescan(self, rid=None):
         """Explicit metadata-only refresh, including when opened with --review."""
-        import librivox_launch as batch
+        from . import launch as batch
         with self.lock:
             if self.running or (self.interactive and (self.interactive.collecting or self.interactive.queue)):
                 raise ValueError("pause collection and wait for outstanding downloads before rescanning")
@@ -441,7 +444,7 @@ class Dashboard:
                     raise ValueError("open the JSON dashboard to download or select quality")
                 if self.running:
                     raise ValueError("pause collection and wait for it to stop before individual actions")
-                import librivox_launch as batch
+                from . import launch as batch
                 args = batch.reader_args(self.jobs[rid])
                 saved = batch.validate_resume(self.jobs[rid], args)
                 args.name = saved.get("reader", args.name)
@@ -517,7 +520,7 @@ class Dashboard:
         self.worker.start()
 
     def scan_more(self, rid, n=10):
-        import librivox_launch as batch
+        from . import launch as batch
         with self.lock:
             if self.running or rid not in self.jobs:
                 raise ValueError("select a configured reader while collection is idle")
@@ -534,7 +537,7 @@ class Dashboard:
 
 def make_handler(dashboard):
     """Compatibility HTTP handler around the same mountable application routes."""
-    from librivox_web import create_app
+    from .web import create_app
     base = create_app(dashboard)._handler_class()
     class Handler(base):
         def handle(self):
@@ -556,7 +559,7 @@ def make_handler(dashboard):
 
 
 def serve_dashboard(dashboard, port=8765, collect=False, browse=False):
-    from librivox_web import dashboard_component
+    from .web import dashboard_component
     component = dashboard_component(dashboard, collect=collect, browse=browse)
     component.run("127.0.0.1", port,
                   on_ready=lambda: print(f"Dashboard: http://127.0.0.1:{port}/ (Ctrl+C to close)", flush=True))

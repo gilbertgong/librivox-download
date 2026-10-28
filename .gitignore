@@ -2,3 +2,6 @@ __pycache__/
 downloads/
 AI/LOCAL.md
 *.local.json
+microweb.py.bak
+
+sessions/
