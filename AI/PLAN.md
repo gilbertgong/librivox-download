@@ -28,7 +28,7 @@ Newly opened sessions remain idle. Generation checks reject stale UI writes afte
 The component discovery manifest opens the same picker in the host-supplied settings directory, with
 collection disabled. Explicit session_file/review_root settings remain supported; review-only mode has
 no session switching. Existing session files, output directories, recordings and decisions are not migrated.
-All 125 tests pass on Python 3.12 and MSYS2/UCRT64 Python 3.14, including package portability and session creation/validation/draining/mounted tests.
+All 129 tests pass on Python 3.12 and MSYS2/UCRT64 Python 3.14, including package portability and session creation/validation/draining/mounted tests.
 Browser checks use generated data and scratch sessions; no production collection or research work is used.
 
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
@@ -192,6 +192,10 @@ for bookmarks, reload and opening another tab. Navigation becomes horizontal on 
 - `AI/USAGE.md`: assistant instructions for setup, smoke tests and normal use.
 - `AI/PROJECT_LOG.md`: initial design record and dated maintenance history.
 - `downloads/`: ignored default output; no samples or per-reader state ship with the repo.
+
+Reader download.file metadata uses portable forward-slash relative paths. Legacy backslashes are
+normalized before file reconciliation and when saving collection or explicit review edits. Read-only
+views do not migrate state on disk; derived inventories in consuming tools require their own rebuild.
 
 ## Known limitations
 

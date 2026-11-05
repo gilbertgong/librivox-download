@@ -225,6 +225,19 @@ def is_prime(c):
     return quality == "128" and c["in_range"] and text_ok
 
 
+def normalize_download_paths(candidates):
+    """Normalize only serialized reader-download paths; leave other metadata intact."""
+    changed = False
+    for candidate in candidates:
+        download = candidate.get("download")
+        if isinstance(download, dict):
+            file = download.get("file")
+            if isinstance(file, str) and "\\" in file:
+                download["file"] = file.replace("\\", "/")
+                changed = True
+    return changed
+
+
 class State:
     """Everything the page shows, guarded by one lock and saved to state.json on each change."""
 
@@ -281,6 +294,7 @@ class State:
                 "checked": self.checked, "candidates": self.candidates}
 
     def save(self):
+        normalize_download_paths(self.candidates)
         self.out.mkdir(parents=True, exist_ok=True)
         self.updated_at = now()
         data = self.record()
@@ -325,7 +339,7 @@ class State:
 
     def reconcile_downloads(self):
         """Keep completion honest without removing the saved path, timestamp or decisions. Lock held."""
-        changed = False
+        changed = normalize_download_paths(self.candidates)
         for c in self.candidates:
             d = c["download"]
             if d and d["status"] == "done" and not (self.out / d["file"]).is_file():
@@ -583,7 +597,7 @@ def download_next(st, cancelled=None, individual_only=False):
         file = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
         folder = st.out / project_slug(c["url"])
         download(url, folder / file)
-        result = {"status": "done", "quality": quality, "file": str(Path(project_slug(c["url"])) / file),
+        result = {"status": "done", "quality": quality, "file": (Path(project_slug(c["url"])) / file).as_posix(),
                   "at": now()}
     except Exception as e:
         result = {"status": "failed", "error": str(e), "at": now()}

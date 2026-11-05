@@ -63,7 +63,7 @@ class DownloadTests(unittest.TestCase):
         file = Path("project-1") / "chapter_128kb.mp3"
         (self.out / file).parent.mkdir()
         (self.out / file).write_bytes(b"audio")
-        self.c["download"] = {"status": "done", "quality": "128", "file": str(file), "at": "before"}
+        self.c["download"] = {"status": "done", "quality": "128", "file": file.as_posix(), "at": "before"}
         return self.out / file
 
     def test_individual_request_survives_restart_without_bulk_target(self):
@@ -74,6 +74,49 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(resumed.want_downloads, 0)
         self.assertEqual(resumed.queue, [self.c["url"]])
         self.assertEqual(app.next_download(resumed)["url"], self.c["url"])
+
+    def test_completed_download_persists_portable_relative_path(self):
+        self.st.enqueue(self.c)
+        def transfer(url, dest):
+            dest.parent.mkdir(parents=True)
+            dest.write_bytes(b"audio")
+        with patch.object(app, "download", side_effect=transfer):
+            self.assertTrue(app.download_next(self.st))
+        saved = json.loads(self.st.path.read_text(encoding="utf-8"))
+        file = saved["candidates"][0]["download"]["file"]
+        self.assertEqual(file, "project-1/chapter_128kb.mp3")
+        self.assertEqual((self.out / file).read_bytes(), b"audio")
+
+    def test_legacy_paths_normalize_before_file_reconciliation(self):
+        file = self.complete()
+        self.c["decision"] = "keep"
+        self.st.save()
+        saved = json.loads(self.st.path.read_text(encoding="utf-8"))
+        saved["candidates"][0]["download"]["file"] = "project-1\\chapter_128kb.mp3"
+        self.st.path.write_text(json.dumps(saved), encoding="utf-8")
+        resumed = self.reload()
+        download = resumed.candidates[0]["download"]
+        self.assertEqual(download, {"status": "done", "quality": "128",
+                                   "file": "project-1/chapter_128kb.mp3", "at": "before"})
+        self.assertEqual(resumed.candidates[0]["decision"], "keep")
+        self.assertEqual((self.out / download["file"]).resolve(), file.resolve())
+        self.assertEqual(json.loads(resumed.path.read_text(encoding="utf-8"))["candidates"][0]["download"], download)
+        self.assertFalse(resumed.reconcile_downloads())
+
+    def test_normalization_is_field_scoped_idempotent_and_preserves_metadata(self):
+        rows = [{"url": "https://example.invalid/a\\b", "note": "keep\\this",
+                 "download": {"status": "missing", "quality": "64", "at": "unchanged",
+                              "file": "book\\clip.mp3", "custom": "keep\\this"}},
+                {"download": None}, {"download": {"status": "queued"}}]
+        expected = copy.deepcopy(rows)
+        expected[0]["download"]["file"] = "book/clip.mp3"
+        self.assertTrue(app.normalize_download_paths(rows))
+        self.assertEqual(rows, expected)
+        self.assertFalse(app.normalize_download_paths(rows))
+        self.st.candidates = rows
+        rows[0]["download"]["file"] = "book\\clip.mp3"
+        self.st.save()
+        self.assertEqual(json.loads(self.st.path.read_text(encoding="utf-8"))["candidates"], expected)
 
     def test_legacy_queued_and_inflight_requests_recover(self):
         for status in ("queued", "downloading"):

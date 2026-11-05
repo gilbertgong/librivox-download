@@ -35,6 +35,18 @@ class DashboardTests(unittest.TestCase):
         self.c["download"] = {"status": "done", "quality": "128", "file": "project-1/test.mp3", "at": "original"}
         self.st.save()
 
+    def test_review_decision_normalizes_legacy_download_path_without_changing_audio(self):
+        saved = json.loads(self.st.path.read_text(encoding="utf-8"))
+        saved["candidates"][0]["download"]["file"] = "project-1\\test.mp3"
+        self.st.path.write_text(json.dumps(saved), encoding="utf-8")
+        view = web.Dashboard.for_review(self.root)
+        view.change("1", self.c["url"], "decide", "keep")
+        updated = json.loads(self.st.path.read_text(encoding="utf-8"))
+        download = updated["candidates"][0]["download"]
+        self.assertEqual(download, {"status": "done", "quality": "128", "file": "project-1/test.mp3", "at": "original"})
+        self.assertEqual(self.audio.read_bytes(), b"0123456789audio")
+        self.assertEqual(updated["candidates"][0]["decision"], "keep")
+
     def request(self, base, path, body=None, headers=None, method=None):
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(base + path, data=data, headers=headers or {}, method=method)

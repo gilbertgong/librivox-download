@@ -309,6 +309,11 @@ sessions, with a metadata browse pass at startup and downloads started explicitl
 the JSON command above, which also saves reader additions and target changes. Existing state with unknown or
 changed selection filters remains reviewable with `--review`; use a fresh output for new collection.
 
+Downloaded audio paths in reader `state.json` use forward slashes, including on Windows. Older backslash
+paths are normalized when collection loads/saves the state or an explicit review edit saves it. Audio files
+keep their existing names and locations. Tools that already derived records from older paths may need
+to rebuild those records.
+
 Queued requests and interrupted transfers are preserved. Resume a collection explicitly, or request an individual
 Download again. Transfers restart from the beginning of their `.part` file rather than resuming byte offsets.
 Existing files are never deleted by Keep/Mark bad/quality changes.

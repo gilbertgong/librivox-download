@@ -565,3 +565,15 @@ unsent values, filter restoration through Back, reader-scoped links and reload. 
 The user encountered a disabled Add reader control during collection and chose to retain the idle-only
 restriction. Added an inline status explanation with instructions to wait or pause, associated with the
 button for accessibility; it disappears when work is idle. No collection or mutation behavior changed.
+
+## 2026-11-04 — Portable reader download paths
+
+Reader downloads used native Windows separators while downstream consumers expected slash-separated
+relative paths. Persist new download.file values using as_posix(); normalize legacy separators before
+file reconciliation and on collection/review saves. Scope normalization to candidate download.file,
+preserving decisions, completion metadata and unrelated fields. Project downloads already use this format.
+Added regressions for successful transfer paths, legacy reload/file identity, idempotence, metadata
+preservation and review writes. 129 offline tests pass on Python 3.12 and Python 3.14.
+No audio, consumer code or derived inventories changed. Affected live reader state was repaired separately
+with a backup and file-identity checks; derived consumer inventories still require coordinated recovery.
+Running hosts pick up the source fix after restart.

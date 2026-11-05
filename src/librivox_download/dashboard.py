@@ -486,6 +486,7 @@ class Dashboard:
                         if action == "download" and state.queue:
                             self.start_individual(rid, state)
                 else:
+                    app.normalize_download_paths(saved["candidates"])
                     saved["updated_at"] = app.now()
                     path = self.paths[rid]
                     tmp = path.with_suffix(".review.tmp")
