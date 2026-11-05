@@ -559,3 +559,9 @@ horizontal navigation. Internal links switch views in place, preserve unsent for
 history so Back, reload and reader-filter links work. Existing endpoints also support direct navigation.
 All 125 offline tests pass; JavaScript syntax checks and isolated browser checks cover view switching,
 unsent values, filter restoration through Back, reader-scoped links and reload. No downloads were started.
+
+## 2026-10-28 — Explain disabled reader entry
+
+The user encountered a disabled Add reader control during collection and chose to retain the idle-only
+restriction. Added an inline status explanation with instructions to wait or pause, associated with the
+button for accessibility; it disappears when work is idle. No collection or mutation behavior changed.

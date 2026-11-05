@@ -37,6 +37,9 @@ recordings still go under the launch directory's `downloads/`, outside `sessions
 keep their own paths: relative output roots are always resolved against the JSON file's directory. Set distinct
 output roots if separate sessions need independent libraries or different selection settings.
 
+Reader entry is available while collection is idle. During scanning or downloading, an explanation beside
+the disabled control tells you to wait or pause collection before adding another reader.
+
 Overview opens with **Add a reader**: enter a reader URL or ID and a collection goal. The dashboard saves it
 in that JSON file. Follow the reader's name to **Review**, where the controls above their recordings let you:
 

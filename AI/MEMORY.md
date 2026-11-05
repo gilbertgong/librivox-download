@@ -95,3 +95,10 @@ panel and drains old work before replacing only its controller, preserving files
 
 *Why:* the user wants a clean root entry point and seamless standalone/shared hosting, with explicit session
 selection, visible active filenames and no server restart when switching.
+
+## Explain reader-entry lockout
+
+Keep adding readers restricted to idle collection for now; show a visible explanation when scanning or
+downloading disables Add reader.
+
+*Why:* the user prefers the simpler existing behavior while the combined console is being exercised.
