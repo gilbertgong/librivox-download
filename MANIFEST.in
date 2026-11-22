@@ -1,4 +1,4 @@
-include console.py librivox_fetch.py librivox_launch.py librivox_web.py
-include microweb-component.json batch.example.json THIRD_PARTY.md
+include librivox_web.py LICENSE
+include microweb-component.json batch.example.json
 recursive-include docs *.md
 include AI/MEMORY.md AI/PLAN.md AI/PROJECT_LOG.md AI/STRATEGY.md AI/USAGE.md

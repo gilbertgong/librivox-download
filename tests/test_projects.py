@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
-import console  # source-checkout bootstrap
+import librivox_web  # source-checkout bootstrap
 from librivox_download import dashboard as web
 from librivox_download import fetch as app
 from librivox_download import launch as launch

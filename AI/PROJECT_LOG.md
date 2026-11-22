@@ -587,3 +587,11 @@ not package files. No selection, state, scanning or download behavior changed.
 
 Removed the unnecessary root microweb wrapper; tests import the namespaced runtime and copied-checkout
 checks no longer copy the wrapper. Updater instructions use the installed module or direct vendor path.
+
+Removed THIRD_PARTY.md at the user's request; runtime provenance stays in AI/USAGE.md and
+the upstream license remains embedded in microweb.py. Removed obsolete packaging metadata and links.
+
+Consolidated root launchers into librivox_web.py, retaining existing component exports and discovery
+while delegating standalone startup to the installed CLI. Removed console.py and the legacy root launch/fetch
+wrappers. Added BSD 2-Clause LICENSE matching microweb and distribution license metadata. Shortened the
+README to basic setup/use, preserving the detailed guide in docs/usage.md.

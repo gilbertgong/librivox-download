@@ -7,7 +7,8 @@ name = "librivox-download"
 dynamic = ["version"]
 description = "Collect, browse and review LibriVox recordings and source texts."
 readme = "README.md"
-license-files = ["THIRD_PARTY.md"]
+license = "BSD-2-Clause"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = []
 

@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import console
+import librivox_web
 from librivox_download import dashboard, launch, web
 from librivox_download.sessions import Sessions
 
@@ -50,17 +50,17 @@ class SessionTests(unittest.TestCase):
         return component.app.handle("POST", "/api/" + action, json.dumps(body).encode())
 
     def test_new_console_without_arguments_opens_picker_without_writing(self):
-        with contextlib.chdir(self.root), patch("sys.argv", ["console.py"]), \
+        with contextlib.chdir(self.root), patch("sys.argv", ["librivox_web.py"]), \
                 patch.object(dashboard, "serve_dashboard") as serve:
-            self.assertEqual(console.main(), 0)
+            self.assertEqual(librivox_web.main(), 0)
         self.assertIsNone(serve.call_args.args[0].manifest)
         self.assertEqual(list(self.root.iterdir()), [])
 
     def test_new_console_requires_file_for_noninteractive_commands(self):
         for option in ("--headless", "--dry-run"):
-            with patch("sys.argv", ["console.py", option]), contextlib.redirect_stderr(io.StringIO()), \
+            with patch("sys.argv", ["librivox_web.py", option]), contextlib.redirect_stderr(io.StringIO()), \
                     self.assertRaises(SystemExit) as error:
-                console.main()
+                librivox_web.main()
             self.assertEqual(error.exception.code, 2)
 
     def test_create_named_session_and_show_active_path_without_collection(self):
@@ -196,14 +196,13 @@ class SessionTests(unittest.TestCase):
             component.stop()
 
     def test_copied_checkout_launches_without_installation_from_another_directory(self):
-        original = Path(console.__file__).parent
+        original = Path(librivox_web.__file__).parent
         copied = self.root / "app"
         copied.mkdir()
-        for name in ("console.py", "librivox_launch.py"):
-            shutil.copy2(original / name, copied / name)
+        shutil.copy2(original / "librivox_web.py", copied / "librivox_web.py")
         shutil.copytree(original / "src", copied / "src", ignore=shutil.ignore_patterns("__pycache__"))
         session = self.session("example.json", {"readers": [1]})
-        result = subprocess.run([sys.executable, "-S", "-B", str(copied / "console.py"), str(session), "--dry-run"],
+        result = subprocess.run([sys.executable, "-S", "-B", str(copied / "librivox_web.py"), str(session), "--dry-run"],
                                 cwd=self.root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["readers"][0]["reader_id"], "1")

@@ -7,7 +7,7 @@ import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
-import console  # source-checkout bootstrap
+import librivox_web  # source-checkout bootstrap
 from librivox_download import dashboard as dashboard
 from librivox_download import web as web
 from librivox_download.microweb import Shell
@@ -21,7 +21,7 @@ class ComponentTests(unittest.TestCase):
         self.root = Path(self.temp.name)
 
     def test_shipped_manifest_constructs_the_factory_with_defaults(self):
-        manifest = json.loads(Path(console.__file__).with_name('microweb-component.json').read_text(encoding='utf-8'))
+        manifest = json.loads(Path(librivox_web.__file__).with_name('microweb-component.json').read_text(encoding='utf-8'))
         self.assertEqual(manifest['component_api'], 1)
         manifest = manifest['components'][0]
         self.assertEqual(manifest['factory'], 'librivox_web:create_component')

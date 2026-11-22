@@ -1,10 +1,10 @@
 """Collect and review LibriVox samples in a local dashboard, or run a headless JSON batch.
 
-    python console.py
-    python console.py batch.json --dry-run
-    python console.py batch.json
-    python console.py --review downloads
-    python console.py batch.json --headless
+    python librivox_web.py
+    python librivox_web.py batch.json --dry-run
+    python librivox_web.py batch.json
+    python librivox_web.py --review downloads
+    python librivox_web.py batch.json --headless
 
 With --headless, progress goes to stderr and the final JSON summary goes to stdout. Exit 0 means all targets met;
 1 means incomplete/failed readers, 2 means invalid configuration, and 130 means interrupted.

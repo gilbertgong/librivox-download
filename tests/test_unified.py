@@ -9,7 +9,7 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
-import console  # source-checkout bootstrap
+import librivox_web  # source-checkout bootstrap
 from librivox_download import launch as batch
 from librivox_download import dashboard as web
 from librivox_download import fetch as app
@@ -215,11 +215,11 @@ class UnifiedTests(unittest.TestCase):
                                        ({"readers": [1]}, ["--browse"], False),
                                        ({"readers": [1], "auto_collect": False}, [], False)):
             self.dashboard(data)
-            with patch("sys.argv", ["librivox_launch.py", str(self.path), *extra]), \
+            with patch("sys.argv", ["librivox-download", str(self.path), *extra]), \
                     patch.object(web, "serve_dashboard") as serve:
                 self.assertEqual(batch.main(), 0)
                 self.assertEqual(serve.call_args.kwargs["collect"], expected)
-        with patch("sys.argv", ["librivox_fetch.py", "Fixture", "https://librivox.org/reader/1/",
+        with patch("sys.argv", ["fetch", "Fixture", "https://librivox.org/reader/1/",
                                 "--out", str(Path(self.temp.name) / "legacy")]), \
                 patch.object(web, "serve_dashboard") as serve:
             app.main()
@@ -228,7 +228,7 @@ class UnifiedTests(unittest.TestCase):
         self.assertFalse((Path(self.temp.name) / "legacy").exists())
 
     def test_no_arguments_creates_default_session_in_working_directory(self):
-        with contextlib.chdir(self.temp.name), patch("sys.argv", ["librivox_launch.py"]), \
+        with contextlib.chdir(self.temp.name), patch("sys.argv", ["librivox-download"]), \
                 patch.object(web, "serve_dashboard") as serve, contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(batch.main(), 0)
             path = Path(batch.DEFAULT_SESSION)
@@ -243,7 +243,7 @@ class UnifiedTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), before)
 
     def test_missing_explicit_file_is_created_but_invalid_existing_file_is_preserved(self):
-        with patch("sys.argv", ["librivox_launch.py", str(self.path)]), \
+        with patch("sys.argv", ["librivox-download", str(self.path)]), \
                 patch.object(web, "serve_dashboard") as serve, contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(batch.main(), 0)
             self.assertEqual(json.loads(self.path.read_text()), {})
@@ -258,13 +258,13 @@ class UnifiedTests(unittest.TestCase):
         for option in ("--dry-run", "--headless"):
             for explicit in ([], [str(self.path)]):
                 with self.subTest(option=option, explicit=bool(explicit)), contextlib.chdir(self.temp.name), \
-                        patch("sys.argv", ["librivox_launch.py", *explicit, option]), \
+                        patch("sys.argv", ["librivox-download", *explicit, option]), \
                         contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
                     batch.main()
                 self.assertEqual(error.exception.code, 2)
                 self.assertFalse(self.path.exists())
                 self.assertFalse((Path(self.temp.name) / batch.DEFAULT_SESSION).exists())
-        with contextlib.chdir(self.temp.name), patch("sys.argv", ["librivox_launch.py", "--review", self.temp.name]), \
+        with contextlib.chdir(self.temp.name), patch("sys.argv", ["librivox-download", "--review", self.temp.name]), \
                 patch.object(web, "serve_dashboard"):
             self.assertEqual(batch.main(), 0)
         self.assertFalse((Path(self.temp.name) / batch.DEFAULT_SESSION).exists())

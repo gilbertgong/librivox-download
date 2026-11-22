@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import console  # existing source-checkout bootstrap
+import librivox_web  # existing source-checkout bootstrap
 from librivox_download import cli, fetch, microweb, web
 
 
