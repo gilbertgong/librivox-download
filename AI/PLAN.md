@@ -16,8 +16,8 @@ console.py is the primary source-checkout entry point. Application modules and f
 src/librivox_download/, with package-relative imports. Source-checkout use remains installation-free; pyproject.toml also
 builds an installable distribution with dashboard HTML, namespaced framework and a librivox-download
 command / python -m librivox_download entry. Component hosts may pass framework= explicitly. The root web adapter and
-legacy launch/fetch scripts are compatibility shims. The vendored microweb runtime lives inside librivox_download and still matches v0.1.2 exactly;
-root microweb.py is a checkout compatibility launcher. See THIRD_PARTY.md.
+legacy launch/fetch scripts are compatibility shims. The vendored microweb runtime lives inside librivox_download and still matches v0.1.2 exactly.
+There is no root framework wrapper; tests and updater commands use the namespaced runtime. See THIRD_PARTY.md.
 
 With no filename, console.py opens a session picker. It lists JSON files in the launch directory and
 sessions/ with validation status. New session creates a named file exclusively under sessions/; that
@@ -30,7 +30,7 @@ Newly opened sessions remain idle. Generation checks reject stale UI writes afte
 The component discovery manifest opens the same picker in the host-supplied settings directory, with
 collection disabled. Explicit session_file/review_root settings remain supported; review-only mode has
 no session switching. Existing session files, output directories, recordings and decisions are not migrated.
-All 132 tests pass on Python 3.12 and MSYS2/UCRT64 Python 3.14, including package portability and session creation/validation/draining/mounted tests.
+All 133 tests pass on Python 3.12 and MSYS2/UCRT64 Python 3.14, including package portability and session creation/validation/draining/mounted tests.
 Browser checks use generated data and scratch sessions; no production collection or research work is used.
 
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download

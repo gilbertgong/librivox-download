@@ -1,5 +1,7 @@
 """Namespaced runtime and source/installed entry contracts; no external requests."""
 import importlib.util
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -32,6 +34,16 @@ class PackagingTests(unittest.TestCase):
                 self.assertTrue((root / 'sessions/test.json').is_file())
             finally:
                 component.stop()
+
+    def test_namespaced_updater_cli_from_another_directory(self):
+        source = Path(microweb.__file__).resolve().parents[1]
+        env = {**os.environ, 'PYTHONPATH': str(source)}
+        with tempfile.TemporaryDirectory() as tmp:
+            for argv in ([sys.executable, '-B', '-m', 'librivox_download.microweb', '--version'],
+                         [sys.executable, '-B', str(Path(microweb.__file__).resolve()), '--version']):
+                result = subprocess.run(argv, cwd=tmp, env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), microweb.__version__)
 
     def test_installed_cli_selects_sessions(self):
         with patch('librivox_download.launch.main', return_value=0) as launch:

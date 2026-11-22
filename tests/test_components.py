@@ -10,7 +10,7 @@ from unittest.mock import patch
 import console  # source-checkout bootstrap
 from librivox_download import dashboard as dashboard
 from librivox_download import web as web
-from microweb import Shell
+from librivox_download.microweb import Shell
 from test_librivox_fetch import candidate
 
 
@@ -42,7 +42,7 @@ class ComponentTests(unittest.TestCase):
         session = self.root / 'session.json'
         component = web.create_component({'session_file': session, 'collect': True})
         self.assertEqual(list(self.root.iterdir()), [])
-        from microweb import _Server
+        from librivox_download.microweb import _Server
         with _Server(('127.0.0.1', 0), component.app._handler_class()) as occupied:
             with self.assertRaises(SystemExit):
                 component.run('127.0.0.1', occupied.server_port)

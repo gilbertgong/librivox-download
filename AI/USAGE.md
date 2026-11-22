@@ -39,8 +39,12 @@ is installed, CLI dry-runs and mounted/standalone HTTP work, and user-data paths
 
 ## Check / update the vendored web runtime
 
-Only on explicit request: `python microweb.py --check-update` reads the upstream release manifest
-without changing files. `python microweb.py --update` installs its release, including over local edits,
+For an installed package, use the module commands below. From an uninstalled source checkout,
+use `python src/librivox_download/microweb.py --check-update` (or `--update`) instead. There is
+no root microweb.py launcher. Both forms target the single package-owned vendored file.
+
+Only on explicit request: `python -m librivox_download.microweb --check-update` reads the upstream release manifest
+without changing files. `python -m librivox_download.microweb --update` installs its release, including over local edits,
 after checking downloaded checksum/version/syntax and preserving current bytes in microweb.py.bak.
 An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
 The package-owned vendored file currently matches upstream v0.1.2 exactly; this release still refuses local modifications

@@ -145,7 +145,7 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(app.handle("POST", "/api/start", stale)[0], 409)
 
     def test_mounted_session_routes_stay_within_the_downloader(self):
-        from microweb import Shell
+        from librivox_download.microweb import Shell
         component = self.component()
         shell = Shell(); shell.add(component, "/downloads")
         page = shell.handle("GET", "/downloads/")[2].decode()
@@ -199,7 +199,7 @@ class SessionTests(unittest.TestCase):
         original = Path(console.__file__).parent
         copied = self.root / "app"
         copied.mkdir()
-        for name in ("console.py", "librivox_launch.py", "microweb.py"):
+        for name in ("console.py", "librivox_launch.py"):
             shutil.copy2(original / name, copied / name)
         shutil.copytree(original / "src", copied / "src", ignore=shutil.ignore_patterns("__pycache__"))
         session = self.session("example.json", {"readers": [1]})

@@ -584,3 +584,6 @@ Added Python 3.12+ wheel/sdist metadata, bundled HTML, installed CLI/module entr
 vendored runtime, retaining checkout launchers. Hosts can explicitly supply their framework; old
 shared-module hosts remain supported. Legacy single-reader output now defaults to the launch directory,
 not package files. No selection, state, scanning or download behavior changed.
+
+Removed the unnecessary root microweb wrapper; tests import the namespaced runtime and copied-checkout
+checks no longer copy the wrapper. Updater instructions use the installed module or direct vendor path.
