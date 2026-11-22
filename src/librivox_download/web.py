@@ -1,9 +1,18 @@
 """Mountable microweb adapter for the downloader's existing collection controller."""
 import html
 import json
+import sys
 from pathlib import Path
 
-from microweb import App, Component, HTTPError, Response, file_response
+from . import microweb as _vendor
+
+
+def _framework(framework=None):
+    # Explicit host selection is preferred. Honor the existing shared-module
+    # convention for older checkout launchers without installing a global module.
+    if framework is not None:
+        return framework
+    return sys.modules.get("microweb", _vendor)
 
 
 def _links(value, prefix):
@@ -17,8 +26,10 @@ def _links(value, prefix):
     return value
 
 
-def create_app(dashboard, sessions=None):
+def create_app(dashboard, sessions=None, *, framework=None):
     """Build routes without starting workers. dashboard may be a deferred getter."""
+    fw = _framework(framework)
+    App, HTTPError, Response, file_response = fw.App, fw.HTTPError, fw.Response, fw.file_response
     web = App()
     def controller():
         current = dashboard() if callable(dashboard) else dashboard
@@ -142,8 +153,10 @@ def create_app(dashboard, sessions=None):
     return web
 
 
-def _component(build, collect=None, browse=False, directory=None, sessions_enabled=True):
+def _component(build, collect=None, browse=False, directory=None, sessions_enabled=True, framework=None):
     from .sessions import Sessions
+    fw = _framework(framework)
+    HTTPError = fw.HTTPError
     host = [None]
     def controller():
         return host[0].current if host[0] else None
@@ -165,17 +178,17 @@ def _component(build, collect=None, browse=False, directory=None, sessions_enabl
     def stop():
         if host[0]:
             host[0].stop()
-    return Component('downloads', 'Downloads', create_app(controller, SessionProxy()), start, stop)
+    return fw.Component('downloads', 'Downloads', create_app(controller, SessionProxy(), framework=fw), start, stop)
 
 
-def dashboard_component(dashboard, collect=False, browse=False):
+def dashboard_component(dashboard, collect=False, browse=False, *, framework=None):
     """Wrap an existing controller, as used by the established standalone CLI."""
-    return _component(lambda: dashboard, collect, browse,
+    return _component(lambda: dashboard, collect, browse, framework=framework,
                       sessions_enabled=not dashboard.review_only and not dashboard.interactive
                       and (bool(dashboard.manifest) or not dashboard.paths))
 
 
-def create_component(settings):
+def create_component(settings, *, framework=None):
     """Quiet factory. Resolve relative paths against explicit settings_dir.
 
     Provide session_file OR review_root. Session creation/loading and controller
@@ -189,7 +202,7 @@ def create_component(settings):
         if not base.is_absolute():
             raise ValueError('settings_dir must be absolute')
         base = base.resolve()
-        return _component(Dashboard, collect=False, directory=base)
+        return _component(Dashboard, collect=False, directory=base, framework=framework)
     key = 'session_file' if 'session_file' in settings else 'review_root'
     if ('session_file' in settings) == ('review_root' in settings):
         raise ValueError('provide session_file or review_root')
@@ -213,4 +226,4 @@ def create_component(settings):
         jobs = launch.load_batch(path)
         return Dashboard(jobs=jobs, manifest=path)
     return _component(build, settings.get('collect', False if key == 'review_root' else None),
-                      directory=settings.get('settings_dir', Path.cwd()), sessions_enabled=key != 'review_root')
+                      directory=settings.get('settings_dir', Path.cwd()), sessions_enabled=key != 'review_root', framework=framework)

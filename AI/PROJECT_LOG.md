@@ -577,3 +577,10 @@ preservation and review writes. 129 offline tests pass on Python 3.12 and Python
 No audio, consumer code or derived inventories changed. Affected live reader state was repaired separately
 with a backup and file-identity checks; derived consumer inventories still require coordinated recovery.
 Running hosts pick up the source fix after restart.
+
+## 2026-11-21 — Installable package
+
+Added Python 3.12+ wheel/sdist metadata, bundled HTML, installed CLI/module entry and namespaced
+vendored runtime, retaining checkout launchers. Hosts can explicitly supply their framework; old
+shared-module hosts remain supported. Legacy single-reader output now defaults to the launch directory,
+not package files. No selection, state, scanning or download behavior changed.

@@ -8,18 +8,22 @@ controller. Headless collection and dry runs remain independent of the web host.
 
 ```python
 from pathlib import Path
-from librivox_web import create_component
-from microweb import Shell
+from librivox_download.web import create_component
+from librivox_download import microweb
+from librivox_download.microweb import Shell
 
-downloads = create_component({"settings_dir": Path("my-data").resolve(), "collect": False})
+downloads = create_component({"settings_dir": Path("my-data").resolve(), "collect": False}, framework=microweb)
 shell = Shell(title="Tools")
 shell.add(downloads, prefix="/downloads")
 shell.run("127.0.0.1", 8765)
 ```
 
-Alternatively call `downloads.run("127.0.0.1", 8765)` for standalone hosting. A host importing several
-tools imports a common compatible microweb runtime first. The bundled copy supports independent use,
-without installation. Other tools should use their own package namespaces.
+Alternatively call `downloads.run("127.0.0.1", 8765)` for standalone hosting. A combined host can pass
+its own compatible microweb module using framework= so Component, App, Response and HTTPError share
+its classes. The example above uses the downloader's bundled module. If omitted, standalone use selects the namespaced bundled copy; older
+checkout hosts that preloaded a top-level microweb module remain supported. No generic top-level
+microweb module is installed. The source-only librivox_web adapter remains available. Other tools
+should use their own package namespaces.
 
 | Setting | Meaning |
 |---|---|
@@ -95,3 +99,10 @@ Project-mode whole-book downloads use a separate catalog, outside this initial r
 
 The synthetic workbench demonstration reads completed, present, non-rejected recordings and their
 reader/title/quality metadata. It does not implement voice preparation or alignment.
+
+## Installed use
+
+Install librivox-download into the host environment, then import librivox_download.web directly.
+No checkout path or sys.path edit is needed. Factories remain quiet; caller-owned settings directories
+hold sessions, recordings and decisions. The package dashboard HTML and vendored runtime ship in the
+wheel. Installing does not create user data or start a service.

@@ -8,6 +8,20 @@ The dashboard also supports [hosting as a component in a shared console](docs/co
 Its web framework is [vendored with its license](THIRD_PARTY.md); no package installation is required.
 `microweb-component.json` also enables local discovery by optional shell launchers, with automatic collection disabled.
 
+## Install as a package
+
+With Python 3.12+ and Git:
+
+```sh
+python -m pip install "librivox-download @ git+https://github.com/gilbertgong/librivox-download.git"
+librivox-download
+```
+
+`python -m librivox_download` launches the same session picker. For reproducible downstream installs,
+append `@<full-commit-hash>` to the Git URL after the packaging change is merged. Installed commands
+use the current directory for sessions and downloads; they never store data in the installed package.
+A source checkout still runs directly with `python -B console.py`, without installing anything.
+
 ## Launch the dashboard
 
 From the repo root, run:

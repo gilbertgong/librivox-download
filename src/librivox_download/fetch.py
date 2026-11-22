@@ -660,7 +660,7 @@ def main():
     ap.add_argument("--range", type=float, nargs=2, default=[5, 15], metavar=("MIN", "MAX"),
                     help="preferred section length in minutes (default 5 15)")
     ap.add_argument("--min-seconds", type=float, default=60, help="never offer a section shorter than this")
-    ap.add_argument("--out", default=None, help="output folder (default: downloads/<name> next to this script)")
+    ap.add_argument("--out", default=None, help="output folder (default: downloads/<name> in the current directory)")
     ap.add_argument("--order", choices=["alpha", "catalog_date"], default="alpha", help="listing order")
     ap.add_argument("--language", default="English", help="only projects in this language ('' for any)")
     ap.add_argument("--port", type=int, default=8765)
@@ -674,7 +674,7 @@ def main():
         ap.error(str(e))
 
     rid = reader_id(args.url)
-    out = Path(args.out or Path(__file__).resolve().parents[2] / "downloads" / slug(args.name))
+    out = Path(args.out or Path.cwd() / "downloads" / slug(args.name))
     from . import launch as batch
     from .dashboard import Dashboard, serve_dashboard
     job = {**batch.DEFAULTS, "reader_id": rid, "url": args.url, "name": args.name,
