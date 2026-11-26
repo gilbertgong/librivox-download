@@ -208,7 +208,7 @@ class UnifiedTests(unittest.TestCase):
             dashboard.scan_more("1", 10)
             dashboard.worker.join(5)
             audio.assert_not_called()
-        self.assertEqual(dashboard.read("1")["target"], 30)
+        self.assertEqual(dashboard.read("1")["target"], 24)  # 2 x the goal of 7, plus the 10 more
 
     def test_startup_policy_and_old_command_use_same_controller(self):
         for data, extra, expected in (({}, [], False), ({"readers": [1]}, [], True),

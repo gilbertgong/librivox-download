@@ -66,8 +66,11 @@ current project list. Project names open a focused native dialog, with a separat
 - Offer the first section in the preferred 5–15 minute range, otherwise the closest, never under one minute.
   One sample per project provides recording variety without taking entire books.
 - A prime candidate is in range, selected at 128 kbps and has downloaded source text when enabled. Unchecked
-  text is provisional until collection checks it. All other candidates are backups. Pause scanning at
-  20 non-rejected prime candidates, or the bulk download target if larger. During collection, rejecting/demoting one allows further scanning; idle manual sessions require an explicit scan.
+  text is provisional until collection checks it. All other candidates are backups. The scan target, in
+  non-rejected prime candidates, is 2 × the reader's goal in collection dashboards (the single-reader page defaults
+  to 20, and review-mode rescans use at least 20); a larger saved target or bulk download target applies instead.
+  Collection scans only until its goal is downloaded. During collection, rejecting/demoting one allows further
+  scanning; idle manual sessions require an explicit scan.
 - Prefer filename-derived 128 kbps URLs; fall back to 64 after an unsuccessful attempt. A player error does not
   prove a file is absent, so the UI explains the failure and offers Retry 128 kbps.
 - Download N selects anything not rejected, prime first; Keep is an annotation, not a prerequisite. Bulk backups

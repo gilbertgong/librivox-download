@@ -156,9 +156,11 @@ can also be reviewed. Collection controls are unavailable: open the batch JSON t
 ### Refresh metadata with Rescan
 
 On Review, select a reader and click **Rescan**, or choose All readers to refresh them sequentially. This starts
-from the first reader-list page and rechecks projects, including previous skips/errors. It stops at the normal
-candidate target (usually 20), listing exhaustion, or the reader time budget. Pause scan stops after the current
-check. Use this when catalog information changes or you want to retry earlier checks.
+from the first reader-list page and rechecks projects, including previous skips/errors. It stops at the
+candidate target, listing exhaustion, or the reader time budget. In a collection dashboard the target is twice the
+reader's collection total (review mode uses at least 20); a larger target already saved for the reader is kept.
+Pause scan stops after the current check. Use this when catalog information changes or you want to retry earlier
+checks.
 
 Rescan only refreshes metadata: it does not collect audio or books. Downloaded/reviewed candidates retain their
 chosen section, recordings and decisions; refreshed alternatives are recorded in their details. Unreviewed,

@@ -119,7 +119,7 @@ def load_batch(path, data=None):
 
 def reader_args(job):
     return SimpleNamespace(name=job["name"], url=job["url"], count=job["count"],
-                           projects=max(20, job["count"]), range=job["range_minutes"],
+                           projects=2 * job["count"], range=job["range_minutes"],
                            download_texts=job["download_texts"], text_mirror=job["text_mirror"],
                            min_seconds=job["min_seconds"], language=job["language"], order=job["order"])
 

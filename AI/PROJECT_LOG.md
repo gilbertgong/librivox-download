@@ -588,3 +588,8 @@ added readers bring no new collection behaviour.
 A host may now name a session that doesn't exist yet under sessions/: it is created like a new session (folder,
 `output_root: ../downloads`), where `{}` would have failed without the folder and put downloads inside it.
 132 offline tests pass on Python 3.12.
+
+## 2026-11-25 — Scan target is twice the goal
+
+The user had asked for scanning to look for twice the goal; the code used `max(20, goal)`. A configured
+reader's target is now 2 × its goal. Targets already saved in `state.json` still apply when larger.
