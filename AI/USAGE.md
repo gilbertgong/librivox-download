@@ -1,7 +1,8 @@
 # Using this repo with an assistant
 
-Read `AI/MEMORY.md` first. The [README](../README.md) describes the tool; [STRATEGY.md](STRATEGY.md) explains
-these instructions. This guide covers operational use without requiring the development history.
+Read `AI/MEMORY.md` first. The [README](../README.md) describes the tool and how it behaves: sessions and files,
+what gets collected, batch settings, source texts and whole projects. [STRATEGY.md](STRATEGY.md) explains these
+instructions. This guide covers operational tasks, without requiring the development history.
 
 ## Task behavior
 
@@ -56,15 +57,10 @@ Success: every test passes. No existing download directory has been used as a fi
 Prerequisites: setup; a writable session directory and free loopback port. Internet access is needed only
 when the user requests metadata, remote previews or downloads. Use documented selection defaults.
 
-1. Launch `python -B librivox_web.py [SESSION.json] [--port PORT]`. Without a filename it opens
-   session.local.json in the launch directory, creating {} if missing (check whether it is the user's before
-   writing to it); Change session offers Open session and New session. New filenames are created exclusively under
-   launch-directory sessions/ (ignored),
-   with .json appended if needed. Existing JSON files in sessions/ and the launch directory are listed
-   with validation errors; do not overwrite invalid or existing files. New UI-created sessions default to
-   auto_collect=false and output_root=../downloads, retaining the launch-directory downloads location.
-   Explicit CLI files retain their own relative output paths and startup auto_collect behavior; --browse
-   suppresses it. Headless/dry-run require an explicit existing file.
+1. Launch `python -B librivox_web.py [SESSION.json] [--port PORT]`; see the README's Sessions and files. Without
+   a filename it opens session.local.json in the launch directory: check whether that is the user's before writing
+   to it. Do not overwrite invalid or existing session files. A file named on the command line starts collecting
+   unless its auto_collect is false or --browse is given. Headless/dry-run require an explicit existing file.
 2. On Overview, Add a reader accepts a LibriVox URL or ID and target, saves it to the session, and stays idle.
    Follow the reader link to Review. Browse / rescan finds candidates without audio/text downloads.
 3. Review provides per-reader Total, Collect / resume, Scan 10 more and Pause, plus per-card Download and
@@ -87,12 +83,9 @@ internet access to LibriVox, the audio host and the configured Gutenberg mirror.
 and scanning if they have not already happened.
 
 1. For new multi-reader requests, prefer the batch task below. Use Download on a Review
-   card or set Total and use Collect / resume above that reader's recordings. The collection target means N total
-   premium non-rejected samples in this output, including earlier downloads; it is not N additional samples.
-   Premium means preferred length, 128 kbps and downloaded source text when enabled. The tool accepts degraded
-   fallbacks after listing exhaustion. Replacements preserve older recordings, so the saved count can exceed N.
-2. Watch transfer status. An individual 128 kbps failure automatically tries 64 without another click. Bulk
-   downloading favors primes and waits until scanning finishes before using backups.
+   card or set Total and use Collect / resume above that reader's recordings. N is the total wanted, not additional
+   samples (README, What gets collected). Replacements preserve older recordings, so the saved count can exceed N.
+2. Watch transfer status. An individual 128 kbps failure automatically tries 64 without another click.
 3. Check that completed records point to actual files under the output directory. A failed or missing status is
    not complete. Retry a failed download manually; inspect its error if it fails again.
 4. If a 128 kbps player attempt failed temporarily, use Retry 128 kbps to select that URL again. This doesn't
@@ -109,21 +102,11 @@ Prerequisites: setup, the user's reader URLs and target count per reader, output
 and disk space. This task includes preparing the JSON and running the existing batch tool. It requires no
 browser automation, HTTP API orchestration, additional libraries or new wrapper scripts.
 
-1. Read the README's Batch downloads section and `batch.example.json`. Prepare a `*.local.json` batch file using
-   the requested URLs/reader IDs and agreed defaults/overrides. Prefer URL strings or positive integer IDs for
-   readers sharing defaults; use an object with url or reader_id for overrides, including an optional explicit
-   name. Digit-string IDs are accepted too. All forms can mix; matching IDs/URLs resolve to one directory identity.
-   The tool fetches a
-   missing name once at collection time and caches it in state, reusing saved names on subsequent runs. Name
-   lookup failures fall back to Reader ID without blocking collection and retry on a later invocation. Dry runs
-   remain offline with placeholder labels. Reader IDs identify directories. Don't invent names or listening decisions.
+1. Read the README's Batch collection section and `batch.example.json`. Prepare a `*.local.json` batch file using
+   the requested URLs/reader IDs and agreed defaults/overrides. Don't invent names or listening decisions.
 2. Confirm the count is a total number of recordings per reader, not additional recordings or a duration target.
-   The tool takes one section per project and seeks that many premium recordings before settling for degraded
-   fallbacks. download_texts defaults true: linked whole Gutenberg books download from a listed mirror into the
-   shared texts/gutenberg cache. Missing text, 64 kbps or outside-range length makes a candidate degraded.
-   Set download_texts false only for audio-only requests; this also removes text-based degradation. The tool
-   retrieves whole books, not exact chapter transcripts or aligned passages. text_mirror can select another
-   mirror with the same generated UTF-8 layout; never substitute the main Gutenberg website.
+   Set download_texts false only for audio-only requests. A different text_mirror must serve the same layout;
+   never substitute the main Gutenberg website.
 3. Set `output_root` explicitly if the user chose a destination. Relative paths are relative to the JSON file.
    If operating under a role with read-only repository access, place both JSON and output outside the repo and
    invoke Python with `-B`. Respect that role's authorization boundaries for data collection.
@@ -139,16 +122,14 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
 6. Inspect each reader's dashboard outcome or the headless exit status/summary, then check saved file paths. Report completed,
    insufficient and failed readers separately, including premium/degraded totals and fallback details. A failed reader does not stop subsequent readers. Time budgets
    are checked between operations, so allow an in-flight request to finish or hit its network timeout.
-7. Rerun the same JSON to resume interrupted work or make another attempt at failed transfers. Changing count or
-   timeout or text settings is allowed; changing selection filters requires a new output root. Missing text
-   retries once per candidate per pass, and completed audio may gain text without another audio transfer.
-   Preserve the shared texts directory alongside reader directories when moving a collection.
-   Older saved state without recorded
-   selection settings is also refused. Preserve it and choose new output, rather than editing away the check.
+7. Rerun the same JSON to resume interrupted work or make another attempt at failed transfers; the README lists
+   which settings may change. Missing text retries once per candidate per pass, and completed audio may gain text
+   without another audio transfer. Older saved state without recorded selection settings is refused. Preserve it
+   and choose new output, rather than editing away the check.
 
 Success: all requested targets are met with files present, or a precise partial/failure report explains which
-readers remain incomplete. Headless exit 0 means all complete; 1 means incomplete/failed, 2 configuration error
-and 130 interruption. A dashboard's normal exit0 only means it closed normally; inspect reader outcomes.
+readers remain incomplete. The README gives the headless exit statuses; a dashboard's normal exit 0 only means it
+closed normally, so inspect reader outcomes.
 Leave the dashboard open when requested for use; otherwise stop your own test server and wait for its current
 operation. Do not schedule future retries or launch downstream dataset preparation/training without instruction.
 

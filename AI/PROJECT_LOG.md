@@ -625,3 +625,7 @@ microweb's server.
 
 At the user's request, standalone startup without a filename again opens `session.local.json` in the launch
 directory instead of the picker, as the older launcher did; a host's sessions stay under `sessions/`.
+
+Removed `docs/usage.md`, which repeated much of `AI/USAGE.md`. The README took its batch settings and non-obvious
+behaviour; `AI/USAGE.md` now points there instead of repeating it. The tour of the dashboard's views and buttons
+was dropped.

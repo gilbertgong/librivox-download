@@ -198,8 +198,9 @@ for bookmarks, reload and opening another tab. Navigation becomes horizontal on 
 - `tests/test_batch.py`: offline batch validation, local HTTP collection, resume, failure and interruption tests.
 - `tests/test_dashboard.py`: state-only review, media ranges, decisions, concurrent collection and CLI controls.
 - `tests/test_unified.py`: empty sessions, reader entry/persistence, manual controls, queue isolation and startup policy.
-- `README.md`: concise introduction and quick start; `docs/usage.md`: detailed controls, options and output.
-- `LICENSE`: BSD 2-Clause, matching the bundled framework; included in package distributions.
+- `README.md`: for people: quick start, sessions and files, selection rules, batch settings and non-obvious
+  behaviour; leave out what the dashboard makes obvious.
+- `LICENSE`: BSD 2-Clause, matching the bundled framework.
 - `AI/USAGE.md`: assistant instructions for setup, smoke tests and normal use.
 - `AI/PROJECT_LOG.md`: initial design record and dated maintenance history.
 - `downloads/`: ignored default output; no samples or per-reader state ship with the repo.

@@ -31,6 +31,14 @@ append to the historical log. Don't use an assistant's built-in or per-machine m
 
 *Why:* built-in memory stays on one computer or account, and other assistants can't see it.
 
+## What the README holds
+
+Give the README the batch details and the useful nuances and non-obvious behaviour; leave out what is intuitive
+from the dashboard. `AI/USAGE.md` holds task steps and points to the README for facts; there is no separate usage
+guide.
+
+*Why:* the user wants one place for usage facts, without a tour of obvious things.
+
 ## Keep the shared docs self-contained
 
 The README and shared `AI/` docs describe only the repo: no local paths,
