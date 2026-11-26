@@ -165,7 +165,14 @@ def _component(build, collect=None, browse=False, directory=None, sessions_enabl
     def stop():
         if host[0]:
             host[0].stop()
-    return Component('downloads', 'Downloads', create_app(controller, SessionProxy()), start, stop)
+    def add_readers(ids, count):
+        """For a host: add these reader IDs to the open session, once started. Nothing is looked up."""
+        if host[0]:
+            with host[0].lock:
+                host[0].current.add_readers(ids, count)
+    component = Component('downloads', 'Downloads', create_app(controller, SessionProxy()), start, stop)
+    component.add_readers = add_readers
+    return component
 
 
 def dashboard_component(dashboard, collect=False, browse=False):
@@ -184,6 +191,7 @@ def create_component(settings):
     """
     from .dashboard import Dashboard
     from . import launch as launch
+    from .sessions import create_session_file
     if 'session_file' not in settings and 'review_root' not in settings:
         base = Path(settings.get('settings_dir', Path.cwd())).expanduser()
         if not base.is_absolute():
@@ -202,15 +210,19 @@ def create_component(settings):
             raise ValueError('settings_dir must be absolute')
         path = base / path
     path = path.resolve()
+    directory = settings.get('settings_dir', Path.cwd())
     def build():
         if key == 'review_root':
             return Dashboard.for_review(path)
         try:
-            with path.open('x', encoding='utf-8', newline='\n') as session:
-                session.write('{}\n')
+            if path.parent == (Path(directory) / 'sessions').resolve():
+                create_session_file(path)  # as New session does: the library stays beside sessions/
+            else:
+                with path.open('x', encoding='utf-8', newline='\n') as session:
+                    session.write('{}\n')
         except FileExistsError:
             pass
         jobs = launch.load_batch(path)
         return Dashboard(jobs=jobs, manifest=path)
     return _component(build, settings.get('collect', False if key == 'review_root' else None),
-                      directory=settings.get('settings_dir', Path.cwd()), sessions_enabled=key != 'review_root')
+                      directory=directory, sessions_enabled=key != 'review_root')

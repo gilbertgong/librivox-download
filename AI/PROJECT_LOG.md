@@ -577,3 +577,14 @@ preservation and review writes. 129 offline tests pass on Python 3.12 and Python
 No audio, consumer code or derived inventories changed. Affected live reader state was repaired separately
 with a backup and file-identity checks; derived consumer inventories still require coordinated recovery.
 Running hosts pick up the source fix after restart.
+
+## 2026-11-24 — Readers added by a host
+
+The component gained `add_readers(ids, count)` so a host can add readers it knows of, saved in one write,
+leaving the dashboard as the session file's only writer. It only adds: a first version looked names up and
+added nothing while busy, and a slow site held up the whole list. A goal of 0 was tried and dropped, so that
+added readers bring no new collection behaviour.
+
+A host may now name a session that doesn't exist yet under sessions/: it is created like a new session (folder,
+`output_root: ../downloads`), where `{}` would have failed without the folder and put downloads inside it.
+132 offline tests pass on Python 3.12.

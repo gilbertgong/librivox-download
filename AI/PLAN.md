@@ -28,7 +28,12 @@ Newly opened sessions remain idle. Generation checks reject stale UI writes afte
 The component discovery manifest opens the same picker in the host-supplied settings directory, with
 collection disabled. Explicit session_file/review_root settings remain supported; review-only mode has
 no session switching. Existing session files, output directories, recordings and decisions are not migrated.
-All 129 tests pass on Python 3.12 and MSYS2/UCRT64 Python 3.14, including package portability and session creation/validation/draining/mounted tests.
+A host can add readers through the component's `add_readers(ids, count)`: no lookup, busy or not (unlike the
+page's Add reader), in one save, so the dashboard stays the only writer of its session file. A host's missing
+session_file directly under settings_dir/sessions/ is created as New session creates one; the standalone CLI
+and other paths still create {}.
+All 132 tests pass on Python 3.12; the previous 129 also passed on MSYS2/UCRT64 Python 3.14, including package
+portability and session creation/validation/draining/mounted tests.
 Browser checks use generated data and scratch sessions; no production collection or research work is used.
 
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download

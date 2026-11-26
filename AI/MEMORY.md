@@ -99,6 +99,7 @@ selection, visible active filenames and no server restart when switching.
 ## Explain reader-entry lockout
 
 Keep adding readers restricted to idle collection for now; show a visible explanation when scanning or
-downloading disables Add reader.
+downloading disables Add reader. This is about the page: a host's `add_readers` only saves entries, with
+nothing to block it (no lookups, no idle requirement).
 
 *Why:* the user prefers the simpler existing behavior while the combined console is being exercised.

@@ -23,7 +23,7 @@ without installation. Other tools should use their own package namespaces.
 
 | Setting | Meaning |
 |---|---|
-| `session_file` | JSON session, created as `{}` at startup if missing; its parent must already exist |
+| `session_file` | JSON session, created at startup if missing: directly under `<settings_dir>/sessions/` as New session creates one (with the folder); elsewhere as `{}`, whose parent must already exist |
 | `review_root` | Existing library, reader directory or state.json to review; alternative to session_file |
 | `settings_dir` | Absolute directory for relative settings paths and the session picker; defaults to launch directory when no path is supplied |
 | `collect` | Startup collection; false disables it; omitted follows the session's existing auto_collect setting |
@@ -40,6 +40,17 @@ On shutdown the host drains accepted requests, then the component requests pause
 collection services to finish their current operation. Saved intent and files remain. It does not stop other
 consoles, external workers or training processes. An occupied port fails before component workers start.
 The compatibility `make_handler(dashboard)` remains available, delegating to these same routes.
+
+## Adding readers from a host
+
+The component has one method for its host, `add_readers(ids, count)`, taking LibriVox reader IDs and a goal.
+It adds the ones the open session doesn't list yet with that goal, in one write, and returns. Nothing is
+looked up: as with any reader entered without a name, a later scan or collection fetches the name. Listed
+readers stay as they are. An invalid ID or goal, or a session file edited outside the dashboard, raises an
+error and adds nothing.
+
+It also adds while the session is collecting, scanning or downloading; the running operation keeps to the
+readers it started with. Nothing is added before the component starts or when it has no session open.
 
 ## Optional discovery launcher
 
@@ -59,8 +70,10 @@ The root microweb runtime remains separate; no package installation or duplicate
 
 For the picker, settings_dir takes the place of a standalone launch directory. Existing JSON files there
 and in its sessions/ subdirectory are listed. New named sessions are created only under sessions/, with
-output_root=../downloads and auto_collect=false. Explicit session_file paths retain their existing semantics.
-The directory must exist when opening an existing configuration; creation of sessions/ follows a user action.
+output_root=../downloads and auto_collect=false. A host's missing session_file directly under sessions/ is
+created the same way at startup; other explicit paths keep their existing semantics.
+The directory must exist when opening an existing configuration; creation of sessions/ follows a user action or
+such a host setting.
 
 POST api/session_open selects a listed path; api/session_new creates a basename (adding .json if omitted).
 Both validate before pausing the current controller, then asynchronously stop/join owned workers and replace
