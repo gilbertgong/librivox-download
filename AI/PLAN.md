@@ -15,7 +15,7 @@ No actual voice workbench is included here.
 librivox_web.py is the only root script: it runs the dashboard and exposes the component factories. The tool is
 used from a clone, standalone or in a console's components/ folder, with nothing to install (pip packaging was
 considered and not adopted). Application modules and frontend live under src/librivox_download/, with
-package-relative imports. The vendored microweb runtime lives there too and still matches v0.1.2 exactly; hosts
+package-relative imports. The vendored microweb runtime lives there too and matches v0.2.3 exactly; hosts
 may pass their own as framework=. There is no root framework wrapper. See USAGE.md for provenance and updater
 commands.
 

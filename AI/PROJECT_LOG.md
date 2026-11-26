@@ -618,3 +618,7 @@ The installable-package branch was merged for its other changes: one root script
 the package with `framework=`, the license and the shorter README. Consumers clone the repository instead of
 installing it, so the packaging metadata, installed command and module entry, version number and the
 launch-directory output default were removed.
+
+Updated the vendored microweb from v0.1.2 to v0.2.3 with its updater, at the user's request. Its handler asks
+its server for request tracking, so `fetch.LocalServer`, which serves the `make_handler` adapter, now builds on
+microweb's server.

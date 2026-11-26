@@ -42,7 +42,8 @@ and responses qualify local media/text URLs for the mount. Standalone paths and 
 On shutdown the host drains accepted requests, then the component requests pause and waits for owned
 collection services to finish their current operation. Saved intent and files remain. It does not stop other
 consoles, external workers or training processes. An occupied port fails before component workers start.
-The compatibility `make_handler(dashboard)` remains available, delegating to these same routes.
+The compatibility `make_handler(dashboard)` remains available, delegating to these same routes; serve it with
+`fetch.LocalServer`, since the handler needs microweb's server.
 
 ## Adding readers from a host
 

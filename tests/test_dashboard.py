@@ -9,6 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import librivox_web  # source-checkout bootstrap
@@ -67,6 +68,8 @@ class DashboardTests(unittest.TestCase):
         request = f'{verb} {path} HTTP/1.0\r\nHost: localhost\r\nContent-Length: {len(payload)}\r\n\r\n'.encode() + payload
         handler.rfile, handler.wfile = io.BytesIO(request), Writer()
         handler.client_address = ('127.0.0.1', 12345)
+        handler.connection = None  # what microweb's handler asks of its server while a request is served
+        handler.server = SimpleNamespace(_requests=threading.Condition(), _stopping=False, _pending=set())
         handler.handle()
         return handler
 

@@ -33,11 +33,10 @@ Only on explicit request: `python src/librivox_download/microweb.py --check-upda
 manifest without changing files. `python src/librivox_download/microweb.py --update` installs its release,
 including over local edits, after checking downloaded checksum/version/syntax and preserving current bytes in
 microweb.py.bak. An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
-The package-owned vendored file currently matches upstream v0.1.2 exactly; this release still refuses local modifications
-when installing updates. Later upstream releases changed that policy. Do not patch or update it silently.
-The source is [gilbertgong/microweb v0.1.2](https://github.com/gilbertgong/microweb/tree/v0.1.2),
-SHA-256 `ae72f0eb51cacd5b6a4be2c3f176962be5ba321bf7bcf71537c174c3c4b93b45`;
-its BSD 2-Clause license text remains embedded in file.
+The vendored file currently matches upstream v0.2.3 exactly. Do not patch or update it silently.
+The source is [gilbertgong/microweb v0.2.3](https://github.com/gilbertgong/microweb/tree/v0.2.3),
+SHA-256 `48926f7429ad3c47f2ed6140e6a6ec871ea7ab71ee8e00f59de63495095d8687`;
+its BSD 2-Clause license text remains embedded in the file.
 An authorized upgrade should be followed by the offline downloader tests and provenance refresh here. Startup/import never performs automatic checks or updates.
 
 ## Run smoke test / test
