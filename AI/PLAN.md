@@ -12,11 +12,12 @@ The HTTP layer now uses vendored microweb and a quiet `librivox_web.create_compo
 Standalone CLI and combined hosting share routes and lifecycle; controller/selection/download logic is
 unchanged. Prefix-aware frontend and media links support mounting. See [component and library contracts](../docs/components.md).
 No actual voice workbench is included here.
-librivox_web.py is the primary source-checkout entry point. Application modules and frontend live under
-src/librivox_download/, with package-relative imports. Source-checkout use remains installation-free; pyproject.toml also
-builds an installable distribution with dashboard HTML, namespaced framework and a librivox-download
-command / python -m librivox_download entry. Component hosts may pass framework= explicitly. The single root librivox_web.py supports direct launches and existing component imports. The vendored microweb runtime lives inside librivox_download and still matches v0.1.2 exactly.
-There is no root framework wrapper; tests and updater commands use the namespaced runtime. See USAGE.md for vendored-runtime provenance and updater commands.
+librivox_web.py is the only root script: it runs the dashboard and exposes the component factories. The tool is
+used from a clone, standalone or in a console's components/ folder, with nothing to install (pip packaging was
+considered and not adopted). Application modules and frontend live under src/librivox_download/, with
+package-relative imports. The vendored microweb runtime lives there too and still matches v0.1.2 exactly; hosts
+may pass their own as framework=. There is no root framework wrapper. See USAGE.md for provenance and updater
+commands.
 
 With no filename, librivox_web.py opens a session picker. It lists JSON files in the launch directory and
 sessions/ with validation status. New session creates a named file exclusively under sessions/; that

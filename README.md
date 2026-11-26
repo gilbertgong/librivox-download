@@ -8,7 +8,7 @@ Requires **Python 3.12+**. No third-party runtime dependencies.
 
 ## Quick start
 
-From a source checkout:
+Clone the repository, then from its folder:
 
 ```sh
 python librivox_web.py
@@ -16,15 +16,6 @@ python librivox_web.py
 
 Open the printed local URL, create a session, and add readers by URL or ID. Browse recordings,
 listen, download, and mark recordings to keep or avoid. Sessions and review decisions are saved locally.
-
-Or install with pip (requires Git):
-
-```sh
-python -m pip install "librivox-download @ git+https://github.com/gilbertgong/librivox-download.git"
-librivox-download
-```
-
-`python -m librivox_download` launches the same dashboard after installation.
 
 ## Batch collection
 

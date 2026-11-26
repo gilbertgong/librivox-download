@@ -611,3 +611,10 @@ A host may now name a session that doesn't exist yet under sessions/: it is crea
 
 The user had asked for scanning to look for twice the goal; the code used `max(20, goal)`. A configured
 reader's target is now 2 × its goal. Targets already saved in `state.json` still apply when larger.
+
+## 2026-11-25 — Clone, not pip
+
+The installable-package branch was merged for its other changes: one root script, the vendored runtime inside
+the package with `framework=`, the license and the shorter README. Consumers clone the repository instead of
+installing it, so the packaging metadata, installed command and module entry, version number and the
+launch-directory output default were removed.

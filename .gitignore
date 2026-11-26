@@ -5,10 +5,3 @@ AI/LOCAL.md
 microweb.py.bak
 
 sessions/
-
-# Local packaging output and test environments
-/build/
-/dist/
-*.egg-info/
-/.venv/
-src/librivox_download/microweb.py.bak

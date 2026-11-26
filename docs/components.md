@@ -6,24 +6,23 @@ controller. Headless collection and dry runs remain independent of the web host.
 
 ## Component factory
 
+Run from the checkout folder, or with it on `sys.path`; importing `librivox_web` adds the package:
+
 ```python
 from pathlib import Path
-from librivox_download.web import create_component
+from librivox_web import create_component
 from librivox_download import microweb
-from librivox_download.microweb import Shell
 
 downloads = create_component({"settings_dir": Path("my-data").resolve(), "collect": False}, framework=microweb)
-shell = Shell(title="Tools")
+shell = microweb.Shell(title="Tools")
 shell.add(downloads, prefix="/downloads")
 shell.run("127.0.0.1", 8765)
 ```
 
-Alternatively call `downloads.run("127.0.0.1", 8765)` for standalone hosting. A combined host can pass
-its own compatible microweb module using framework= so Component, App, Response and HTTPError share
-its classes. The example above uses the downloader's bundled module. If omitted, standalone use selects the namespaced bundled copy; older
-checkout hosts that preloaded a top-level microweb module remain supported. No generic top-level
-microweb module is installed. The source-only librivox_web adapter remains available. Other tools
-should use their own package namespaces.
+Alternatively call `downloads.run("127.0.0.1", 8765)` for standalone hosting. A combined host passes its own
+compatible microweb module as `framework=`, so Component, App, Response and HTTPError share its classes. The
+example above uses the downloader's bundled module. If `framework` is omitted, a top-level `microweb` module
+the host has already loaded is used, else the bundled copy.
 
 | Setting | Meaning |
 |---|---|
@@ -68,9 +67,8 @@ performed by discovery. Startup data creation follows binding. This does not cha
 
 ## Sessions and source package
 
-librivox_web.py exposes the primary factory, backed by src/librivox_download/web.py and the named application
-package. The root librivox_web.py is retained as a quiet adapter for existing discovery/explicit launchers.
-The namespaced microweb runtime lives in that package; direct checkout use needs no installation.
+librivox_web.py exposes the factories, backed by src/librivox_download/web.py and the named application
+package. The bundled microweb runtime lives in that package; checkout use needs no installation.
 
 For the picker, settings_dir takes the place of a standalone launch directory. Existing JSON files there
 and in its sessions/ subdirectory are listed. New named sessions are created only under sessions/, with
@@ -112,10 +110,3 @@ Project-mode whole-book downloads use a separate catalog, outside this initial r
 
 The synthetic workbench demonstration reads completed, present, non-rejected recordings and their
 reader/title/quality metadata. It does not implement voice preparation or alignment.
-
-## Installed use
-
-Install librivox-download into the host environment, then import librivox_download.web directly.
-No checkout path or sys.path edit is needed. Factories remain quiet; caller-owned settings directories
-hold sessions, recordings and decisions. The package dashboard HTML and vendored runtime ship in the
-wheel. Installing does not create user data or start a service.

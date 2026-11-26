@@ -7,7 +7,11 @@ if SOURCE not in sys.path:
     sys.path.insert(0, SOURCE)
 
 from librivox_download.web import create_app, create_component, dashboard_component
-from librivox_download.cli import main
+
+
+def main():
+    from librivox_download.launch import main as launch
+    return launch(choose_session=True)
 
 
 if __name__ == "__main__":

@@ -293,10 +293,10 @@ class DashboardTests(unittest.TestCase):
     def test_dashboard_cli_routes_and_bind_before_collection(self):
         manifest = self.root / "batch.json"
         manifest.write_text(json.dumps({"readers": [{"url": self.job["url"]}], "output_root": "audio"}))
-        with patch("sys.argv", ["librivox-download", str(manifest)]), patch.object(web, "serve_dashboard") as serve:
+        with patch("sys.argv", ["librivox_web.py", str(manifest)]), patch.object(web, "serve_dashboard") as serve:
             self.assertEqual(batch.main(), 0)
             self.assertTrue(serve.call_args.kwargs["collect"])
-        with patch("sys.argv", ["librivox-download", "--review", str(self.root / "1")]), \
+        with patch("sys.argv", ["librivox_web.py", "--review", str(self.root / "1")]), \
                 patch.object(web, "serve_dashboard") as serve:
             self.assertEqual(batch.main(), 0)
             self.assertFalse(serve.call_args.args[0].jobs)

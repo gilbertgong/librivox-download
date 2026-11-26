@@ -25,28 +25,14 @@ Prerequisite: a local checkout and permission to run a Python interpreter.
 
 Success: help exits successfully. Do not install unrelated audio/AI libraries.
 
-## Installed package setup
-
-With Python 3.12+ and Git, pip install from the Git URL in README (pin a tested full commit for a
-consumer). Check librivox-download --help and python -m librivox_download --help outside the source
-checkout. Source use still has no build dependency; building/installing uses setuptools through pip.
-Runtime dependencies remain empty. Installed state belongs in the launch/settings directory, never
-site-packages. Component consumers import librivox_download.web and pass their framework explicitly.
-
-Packaging checks: build wheel and sdist; install each into an isolated environment and test outside
-the source tree. Verify dashboard.html and vendored runtime are included, no generic microweb module
-is installed, CLI dry-runs and mounted/standalone HTTP work, and user-data paths stay outside the package.
-
 ## Check / update the vendored web runtime
 
-For an installed package, use the module commands below. From an uninstalled source checkout,
-use `python src/librivox_download/microweb.py --check-update` (or `--update`) instead. There is
-no root microweb.py launcher. Both forms target the single package-owned vendored file.
+The runtime is the single file `src/librivox_download/microweb.py`.
 
-Only on explicit request: `python -m librivox_download.microweb --check-update` reads the upstream release manifest
-without changing files. `python -m librivox_download.microweb --update` installs its release, including over local edits,
-after checking downloaded checksum/version/syntax and preserving current bytes in microweb.py.bak.
-An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
+Only on explicit request: `python src/librivox_download/microweb.py --check-update` reads the upstream release
+manifest without changing files. `python src/librivox_download/microweb.py --update` installs its release,
+including over local edits, after checking downloaded checksum/version/syntax and preserving current bytes in
+microweb.py.bak. An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
 The package-owned vendored file currently matches upstream v0.1.2 exactly; this release still refuses local modifications
 when installing updates. Later upstream releases changed that policy. Do not patch or update it silently.
 The source is [gilbertgong/microweb v0.1.2](https://github.com/gilbertgong/microweb/tree/v0.1.2),
