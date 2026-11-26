@@ -31,17 +31,16 @@ import argparse
 import html
 import json
 import re
-import socket
 import sys
 import threading
 import time
 import urllib.parse
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import text as texts
 from . import api as api
+from .microweb import _Server
 
 USER_AGENT = "librivox-download (personal research)"
 DELAY = 0.5  # seconds between LibriVox page requests
@@ -640,15 +639,11 @@ def make_handler(st):
     return dashboard_handler(Dashboard.for_interactive(st))
 
 
-class LocalServer(ThreadingHTTPServer):
-    """Fail on an occupied port, including on Windows, before starting any background work."""
+class LocalServer(_Server):
+    """The server for make_handler's handler class, which needs microweb's request tracking. Fails on an occupied
+    port, including on Windows, before starting any background work."""
 
     allow_reuse_address = False
-
-    def server_bind(self):
-        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
 
 
 def main():

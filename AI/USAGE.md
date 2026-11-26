@@ -1,7 +1,8 @@
 # Using this repo with an assistant
 
-Read `AI/MEMORY.md` first. The [README](../README.md) describes the tool; [STRATEGY.md](STRATEGY.md) explains
-these instructions. This guide covers operational use without requiring the development history.
+Read `AI/MEMORY.md` first. The [README](../README.md) describes the tool and how it behaves: sessions and files,
+what gets collected, batch settings, source texts and whole projects. [STRATEGY.md](STRATEGY.md) explains these
+instructions. This guide covers operational tasks, without requiring the development history.
 
 ## Task behavior
 
@@ -21,20 +22,23 @@ Prerequisite: a local checkout and permission to run a Python interpreter.
 2. Use an existing suitable interpreter. If none exists, explain that Python must be installed and follow the
    user's environment preferences. No third-party Python dependencies, virtual environment, model weights or
    build tools are required.
-3. From the repo root run `python -B console.py --help` with that interpreter.
+3. From the repo root run `python -B librivox_web.py --help` with that interpreter.
 
 Success: help exits successfully. Do not install unrelated audio/AI libraries.
 
 ## Check / update the vendored web runtime
 
-Only on explicit request: `python microweb.py --check-update` reads the upstream release manifest
-without changing files. `python microweb.py --update` installs its release, including over local edits,
-after checking downloaded checksum/version/syntax and preserving current bytes in microweb.py.bak.
-An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
-The vendored file currently matches upstream v0.1.2 exactly; this release still refuses local modifications
-when installing updates. Later upstream releases changed that policy. Do not patch or update it silently.
-An authorized upgrade should be followed by the offline downloader tests and provenance refresh in
-THIRD_PARTY.md. Startup/import never performs automatic checks or updates.
+The runtime is the single file `src/librivox_download/microweb.py`.
+
+Only on explicit request: `python src/librivox_download/microweb.py --check-update` reads the upstream release
+manifest without changing files. `python src/librivox_download/microweb.py --update` installs its release,
+including over local edits, after checking downloaded checksum/version/syntax and preserving current bytes in
+microweb.py.bak. An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
+The vendored file currently matches upstream v0.2.3 exactly. Do not patch or update it silently.
+The source is [gilbertgong/microweb v0.2.3](https://github.com/gilbertgong/microweb/tree/v0.2.3),
+SHA-256 `48926f7429ad3c47f2ed6140e6a6ec871ea7ab71ee8e00f59de63495095d8687`;
+its BSD 2-Clause license text remains embedded in the file.
+An authorized upgrade should be followed by the offline downloader tests and provenance refresh here. Startup/import never performs automatic checks or updates.
 
 ## Run smoke test / test
 
@@ -53,14 +57,10 @@ Success: every test passes. No existing download directory has been used as a fi
 Prerequisites: setup; a writable session directory and free loopback port. Internet access is needed only
 when the user requests metadata, remote previews or downloads. Use documented selection defaults.
 
-1. Launch `python -B console.py [SESSION.json] [--port PORT]`. Without a filename, use Open session
-   or New session. New filenames are created exclusively under launch-directory sessions/ (ignored),
-   with .json appended if needed. Existing JSON files in sessions/ and the launch directory are listed
-   with validation errors; do not overwrite invalid or existing files. New UI-created sessions default to
-   auto_collect=false and output_root=../downloads, retaining the launch-directory downloads location.
-   Explicit CLI files retain their own relative output paths and startup auto_collect behavior; --browse
-   suppresses it. Headless/dry-run require an explicit existing file. The legacy librivox_launch.py
-   wrapper retains its older default session.local.json behavior.
+1. Launch `python -B librivox_web.py [SESSION.json] [--port PORT]`; see the README's Sessions and files. Without
+   a filename it opens session.local.json in the launch directory: check whether that is the user's before writing
+   to it. Do not overwrite invalid or existing session files. A file named on the command line starts collecting
+   unless its auto_collect is false or --browse is given. Headless/dry-run require an explicit existing file.
 2. On Overview, Add a reader accepts a LibriVox URL or ID and target, saves it to the session, and stays idle.
    Follow the reader link to Review. Browse / rescan finds candidates without audio/text downloads.
 3. Review provides per-reader Total, Collect / resume, Scan 10 more and Pause, plus per-card Download and
@@ -83,12 +83,9 @@ internet access to LibriVox, the audio host and the configured Gutenberg mirror.
 and scanning if they have not already happened.
 
 1. For new multi-reader requests, prefer the batch task below. Use Download on a Review
-   card or set Total and use Collect / resume above that reader's recordings. The collection target means N total
-   premium non-rejected samples in this output, including earlier downloads; it is not N additional samples.
-   Premium means preferred length, 128 kbps and downloaded source text when enabled. The tool accepts degraded
-   fallbacks after listing exhaustion. Replacements preserve older recordings, so the saved count can exceed N.
-2. Watch transfer status. An individual 128 kbps failure automatically tries 64 without another click. Bulk
-   downloading favors primes and waits until scanning finishes before using backups.
+   card or set Total and use Collect / resume above that reader's recordings. N is the total wanted, not additional
+   samples (README, What gets collected). Replacements preserve older recordings, so the saved count can exceed N.
+2. Watch transfer status. An individual 128 kbps failure automatically tries 64 without another click.
 3. Check that completed records point to actual files under the output directory. A failed or missing status is
    not complete. Retry a failed download manually; inspect its error if it fails again.
 4. If a 128 kbps player attempt failed temporarily, use Retry 128 kbps to select that URL again. This doesn't
@@ -105,28 +102,18 @@ Prerequisites: setup, the user's reader URLs and target count per reader, output
 and disk space. This task includes preparing the JSON and running the existing batch tool. It requires no
 browser automation, HTTP API orchestration, additional libraries or new wrapper scripts.
 
-1. Read the README's Batch downloads section and `batch.example.json`. Prepare a `*.local.json` batch file using
-   the requested URLs/reader IDs and agreed defaults/overrides. Prefer URL strings or positive integer IDs for
-   readers sharing defaults; use an object with url or reader_id for overrides, including an optional explicit
-   name. Digit-string IDs are accepted too. All forms can mix; matching IDs/URLs resolve to one directory identity.
-   The tool fetches a
-   missing name once at collection time and caches it in state, reusing saved names on subsequent runs. Name
-   lookup failures fall back to Reader ID without blocking collection and retry on a later invocation. Dry runs
-   remain offline with placeholder labels. Reader IDs identify directories. Don't invent names or listening decisions.
+1. Read the README's Batch collection section and `batch.example.json`. Prepare a `*.local.json` batch file using
+   the requested URLs/reader IDs and agreed defaults/overrides. Don't invent names or listening decisions.
 2. Confirm the count is a total number of recordings per reader, not additional recordings or a duration target.
-   The tool takes one section per project and seeks that many premium recordings before settling for degraded
-   fallbacks. download_texts defaults true: linked whole Gutenberg books download from a listed mirror into the
-   shared texts/gutenberg cache. Missing text, 64 kbps or outside-range length makes a candidate degraded.
-   Set download_texts false only for audio-only requests; this also removes text-based degradation. The tool
-   retrieves whole books, not exact chapter transcripts or aligned passages. text_mirror can select another
-   mirror with the same generated UTF-8 layout; never substitute the main Gutenberg website.
+   Set download_texts false only for audio-only requests. A different text_mirror must serve the same layout;
+   never substitute the main Gutenberg website.
 3. Set `output_root` explicitly if the user chose a destination. Relative paths are relative to the JSON file.
    If operating under a role with read-only repository access, place both JSON and output outside the repo and
    invoke Python with `-B`. Respect that role's authorization boundaries for data collection.
-4. Run `python -B console.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
+4. Run `python -B librivox_web.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
    This validates the entire configuration without writing output or contacting remote services. Check that no
    other job is using the same output directories before starting actual collection.
-5. If the user wants a browsable dashboard, run `python -B console.py PATH_TO_BATCH [--port PORT]` and open
+5. If the user wants a browsable dashboard, run `python -B librivox_web.py PATH_TO_BATCH [--port PORT]` and open
    the printed loopback URL. Collection starts automatically unless auto_collect is false or --browse is supplied. Overview shows progress and explicit collection/
    pause controls; Review shows all saved candidates and decisions. The server remains available after completion.
    If the request is for unattended command execution, use `--headless` so it exits when collection finishes.
@@ -135,16 +122,14 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
 6. Inspect each reader's dashboard outcome or the headless exit status/summary, then check saved file paths. Report completed,
    insufficient and failed readers separately, including premium/degraded totals and fallback details. A failed reader does not stop subsequent readers. Time budgets
    are checked between operations, so allow an in-flight request to finish or hit its network timeout.
-7. Rerun the same JSON to resume interrupted work or make another attempt at failed transfers. Changing count or
-   timeout or text settings is allowed; changing selection filters requires a new output root. Missing text
-   retries once per candidate per pass, and completed audio may gain text without another audio transfer.
-   Preserve the shared texts directory alongside reader directories when moving a collection.
-   Older saved state without recorded
-   selection settings is also refused. Preserve it and choose new output, rather than editing away the check.
+7. Rerun the same JSON to resume interrupted work or make another attempt at failed transfers; the README lists
+   which settings may change. Missing text retries once per candidate per pass, and completed audio may gain text
+   without another audio transfer. Older saved state without recorded selection settings is refused. Preserve it
+   and choose new output, rather than editing away the check.
 
 Success: all requested targets are met with files present, or a precise partial/failure report explains which
-readers remain incomplete. Headless exit 0 means all complete; 1 means incomplete/failed, 2 configuration error
-and 130 interruption. A dashboard's normal exit0 only means it closed normally; inspect reader outcomes.
+readers remain incomplete. The README gives the headless exit statuses; a dashboard's normal exit 0 only means it
+closed normally, so inspect reader outcomes.
 Leave the dashboard open when requested for use; otherwise stop your own test server and wait for its current
 operation. Do not schedule future retries or launch downstream dataset preparation/training without instruction.
 
@@ -154,7 +139,7 @@ Prerequisites: setup and the user's existing output root, reader directory or st
 access, migration or new index is needed. This request authorizes opening the dashboard; it doesn't authorize
 making subjective listening decisions or collecting replacements unless the user requests those actions.
 
-1. Run `python -B console.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
+1. Run `python -B librivox_web.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
    the root state file or immediate reader subdirectories. An empty root is supported; duplicate reader IDs
    require opening the intended reader directory explicitly. Legacy saved state can be reviewed without conversion.
 2. Overview shows saved readers, counts and last status. Review links preserve the reader selection. Review
@@ -265,8 +250,8 @@ For checks use scratch sessions/output; do not switch a live user collection unl
 
 ## Source layout
 
-console.py is the thin primary entry point and exposes create_component. The named application package
+librivox_web.py is the thin primary entry point and exposes create_component. The named application package
 is under src/librivox_download/ (launch, web, dashboard, sessions, fetch, api, projects, text, dashboard.html).
-The root microweb.py stays directly vendored and updatable. Legacy launch/fetch scripts and librivox_web.py
-are small compatibility adapters; keep factory imports quiet and use package-relative imports internally.
-No package installation is needed when running console.py from a source checkout, even from another directory.
+The microweb runtime is vendored inside that package. The single root librivox_web.py
+launches the shared CLI or exposes component factories; keep factory imports quiet and use package-relative imports internally.
+No package installation is needed when running librivox_web.py from a source checkout, even from another directory.

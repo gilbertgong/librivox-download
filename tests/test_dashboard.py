@@ -9,9 +9,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-import console  # source-checkout bootstrap
+import librivox_web  # source-checkout bootstrap
 from librivox_download import launch as batch
 from librivox_download import dashboard as web
 from librivox_download import fetch as app
@@ -67,6 +68,8 @@ class DashboardTests(unittest.TestCase):
         request = f'{verb} {path} HTTP/1.0\r\nHost: localhost\r\nContent-Length: {len(payload)}\r\n\r\n'.encode() + payload
         handler.rfile, handler.wfile = io.BytesIO(request), Writer()
         handler.client_address = ('127.0.0.1', 12345)
+        handler.connection = None  # what microweb's handler asks of its server while a request is served
+        handler.server = SimpleNamespace(_requests=threading.Condition(), _stopping=False, _pending=set())
         handler.handle()
         return handler
 
@@ -293,10 +296,10 @@ class DashboardTests(unittest.TestCase):
     def test_dashboard_cli_routes_and_bind_before_collection(self):
         manifest = self.root / "batch.json"
         manifest.write_text(json.dumps({"readers": [{"url": self.job["url"]}], "output_root": "audio"}))
-        with patch("sys.argv", ["librivox_launch.py", str(manifest)]), patch.object(web, "serve_dashboard") as serve:
+        with patch("sys.argv", ["librivox_web.py", str(manifest)]), patch.object(web, "serve_dashboard") as serve:
             self.assertEqual(batch.main(), 0)
             self.assertTrue(serve.call_args.kwargs["collect"])
-        with patch("sys.argv", ["librivox_launch.py", "--review", str(self.root / "1")]), \
+        with patch("sys.argv", ["librivox_web.py", "--review", str(self.root / "1")]), \
                 patch.object(web, "serve_dashboard") as serve:
             self.assertEqual(batch.main(), 0)
             self.assertFalse(serve.call_args.args[0].jobs)

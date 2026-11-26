@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from unittest.mock import patch
 
-import console  # source-checkout bootstrap
+import librivox_web  # source-checkout bootstrap
 from librivox_download import launch as batch
 from librivox_download import fetch as app
 from test_librivox_fetch import candidate, serving
@@ -307,14 +307,14 @@ class BatchTests(unittest.TestCase):
     def test_cli_dry_run_and_summary_exit_codes(self):
         self.jobs()
         stdout = io.StringIO()
-        with patch("sys.argv", ["librivox_launch.py", str(self.path), "--dry-run"]), \
+        with patch("sys.argv", ["librivox_web.py", str(self.path), "--dry-run"]), \
                 contextlib.redirect_stdout(stdout):
             self.assertEqual(batch.main(), 0)
         self.assertEqual(len(json.loads(stdout.getvalue())["readers"]), 2)
         self.assertFalse((self.root / "audio").exists())
         for statuses, exit_code in ((["completed", "completed"], 0), (["completed", "insufficient"], 1),
                                     (["failed", "completed"], 1), (["interrupted", "not_run"], 130)):
-            with self.subTest(statuses=statuses), patch("sys.argv", ["librivox_launch.py", str(self.path), "--headless"]), \
+            with self.subTest(statuses=statuses), patch("sys.argv", ["librivox_web.py", str(self.path), "--headless"]), \
                     patch.object(batch, "run_batch", return_value={"results": [{"status": s} for s in statuses]}), \
                     contextlib.redirect_stdout(io.StringIO()) as output:
                 self.assertEqual(batch.main(), exit_code)

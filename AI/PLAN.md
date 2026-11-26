@@ -12,13 +12,15 @@ The HTTP layer now uses vendored microweb and a quiet `librivox_web.create_compo
 Standalone CLI and combined hosting share routes and lifecycle; controller/selection/download logic is
 unchanged. Prefix-aware frontend and media links support mounting. See [component and library contracts](../docs/components.md).
 No actual voice workbench is included here.
-console.py is the primary source-checkout entry point. Application modules and frontend live under
-src/librivox_download/, with package-relative imports and no installation step. The root web adapter and
-legacy launch/fetch scripts are compatibility shims. The vendored microweb runtime remains at the root
-and currently matches released v0.1.2 exactly; see THIRD_PARTY.md.
+librivox_web.py is the only root script: it runs the dashboard and exposes the component factories. The tool is
+used from a clone, standalone or in a console's components/ folder, with nothing to install (pip packaging was
+considered and not adopted). Application modules and frontend live under src/librivox_download/, with
+package-relative imports. The vendored microweb runtime lives there too and matches v0.2.3 exactly; hosts
+may pass their own as framework=. There is no root framework wrapper. See USAGE.md for provenance and updater
+commands.
 
-With no filename, console.py opens a session picker. It lists JSON files in the launch directory and
-sessions/ with validation status. New session creates a named file exclusively under sessions/; that
+With no filename, librivox_web.py opens session.local.json in the launch directory, creating {} if missing. The
+session picker lists JSON files in the launch directory and sessions/ with validation status. New session creates a named file exclusively under sessions/; that
 folder and microweb.py.bak are ignored. UI-created configs explicitly retain ../downloads and disable
 auto collection. Existing explicit JSON paths retain their own config-relative output roots. The header
 names the active session with its full path on hover. Change session validates before pausing/draining
@@ -28,15 +30,20 @@ Newly opened sessions remain idle. Generation checks reject stale UI writes afte
 The component discovery manifest opens the same picker in the host-supplied settings directory, with
 collection disabled. Explicit session_file/review_root settings remain supported; review-only mode has
 no session switching. Existing session files, output directories, recordings and decisions are not migrated.
-All 129 tests pass on Python 3.12 and MSYS2/UCRT64 Python 3.14, including package portability and session creation/validation/draining/mounted tests.
+A host can add readers through the component's `add_readers(ids, count)`: no lookup, busy or not (unlike the
+page's Add reader), in one save, so the dashboard stays the only writer of its session file. A host's missing
+session_file directly under settings_dir/sessions/ is created as New session creates one; the standalone CLI
+and other paths still create {}.
+All 134 tests pass on Python 3.12, including checkout portability and session creation/validation/draining/mounted
+tests.
 Browser checks use generated data and scratch sessions; no production collection or research work is used.
 
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
 by default; missing text joins 64 kbps and out-of-range length as a degraded fallback. The interactive script also
 provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
 manual entry and automatic batches use one JSON session and three-view dashboard. Empty JSON objects open
-reader entry; manual controls live with recordings on Review. console.py starts the picker or an explicit
-JSON session. The compatibility librivox_launch.py retains its old default session.local.json behavior.
+reader entry; manual controls live with recordings on Review. librivox_web.py starts the default or an explicit
+JSON session. Older root launch/fetch wrappers have been removed.
 Explicit missing dashboard session paths create {}; headless/dry-run require existing valid files.
 The older single-reader CLI is a compatibility
 launch into that same controller. Review-only startup loads saved state
@@ -61,8 +68,11 @@ current project list. Project names open a focused native dialog, with a separat
 - Offer the first section in the preferred 5–15 minute range, otherwise the closest, never under one minute.
   One sample per project provides recording variety without taking entire books.
 - A prime candidate is in range, selected at 128 kbps and has downloaded source text when enabled. Unchecked
-  text is provisional until collection checks it. All other candidates are backups. Pause scanning at
-  20 non-rejected prime candidates, or the bulk download target if larger. During collection, rejecting/demoting one allows further scanning; idle manual sessions require an explicit scan.
+  text is provisional until collection checks it. All other candidates are backups. The scan target, in
+  non-rejected prime candidates, is 2 × the reader's goal in collection dashboards (the single-reader page defaults
+  to 20, and review-mode rescans use at least 20); a larger saved target or bulk download target applies instead.
+  Collection scans only until its goal is downloaded. During collection, rejecting/demoting one allows further
+  scanning; idle manual sessions require an explicit scan.
 - Prefer filename-derived 128 kbps URLs; fall back to 64 after an unsuccessful attempt. A player error does not
   prove a file is absent, so the UI explains the failure and offers Retry 128 kbps.
 - Download N selects anything not rejected, prime first; Keep is an annotation, not a prerequisite. Bulk backups
@@ -169,7 +179,7 @@ for bookmarks, reload and opening another tab. Navigation becomes horizontal on 
 
 ## Orientation
 
-- `console.py`: primary standalone entry point and component export; legacy root scripts are small adapters.
+- `librivox_web.py`: sole root Python entry point and component export.
 - `src/librivox_download/web.py`: mounted routes and lifecycle; `sessions.py`: picker and controller switching.
 - `tests/test_sessions.py`: session creation, invalid configs, draining/stale requests and copied-checkout portability.
 
@@ -188,7 +198,9 @@ for bookmarks, reload and opening another tab. Navigation becomes horizontal on 
 - `tests/test_batch.py`: offline batch validation, local HTTP collection, resume, failure and interruption tests.
 - `tests/test_dashboard.py`: state-only review, media ranges, decisions, concurrent collection and CLI controls.
 - `tests/test_unified.py`: empty sessions, reader entry/persistence, manual controls, queue isolation and startup policy.
-- `README.md`: running the tool, options and output.
+- `README.md`: for people: quick start, sessions and files, selection rules, batch settings and non-obvious
+  behaviour; leave out what the dashboard makes obvious.
+- `LICENSE`: BSD 2-Clause, matching the bundled framework.
 - `AI/USAGE.md`: assistant instructions for setup, smoke tests and normal use.
 - `AI/PROJECT_LOG.md`: initial design record and dated maintenance history.
 - `downloads/`: ignored default output; no samples or per-reader state ship with the repo.

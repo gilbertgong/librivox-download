@@ -7,10 +7,10 @@ import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
-import console  # source-checkout bootstrap
+import librivox_web  # source-checkout bootstrap
 from librivox_download import dashboard as dashboard
 from librivox_download import web as web
-from microweb import Shell
+from librivox_download.microweb import Shell
 from test_librivox_fetch import candidate
 
 
@@ -21,7 +21,7 @@ class ComponentTests(unittest.TestCase):
         self.root = Path(self.temp.name)
 
     def test_shipped_manifest_constructs_the_factory_with_defaults(self):
-        manifest = json.loads(Path(console.__file__).with_name('microweb-component.json').read_text(encoding='utf-8'))
+        manifest = json.loads(Path(librivox_web.__file__).with_name('microweb-component.json').read_text(encoding='utf-8'))
         self.assertEqual(manifest['component_api'], 1)
         manifest = manifest['components'][0]
         self.assertEqual(manifest['factory'], 'librivox_web:create_component')
@@ -42,7 +42,7 @@ class ComponentTests(unittest.TestCase):
         session = self.root / 'session.json'
         component = web.create_component({'session_file': session, 'collect': True})
         self.assertEqual(list(self.root.iterdir()), [])
-        from microweb import _Server
+        from librivox_download.microweb import _Server
         with _Server(('127.0.0.1', 0), component.app._handler_class()) as occupied:
             with self.assertRaises(SystemExit):
                 component.run('127.0.0.1', occupied.server_port)
@@ -60,6 +60,21 @@ class ComponentTests(unittest.TestCase):
             component.run('127.0.0.1', 0, ready, stop_event=done)
         start.assert_not_called()
         self.assertEqual((self.root / 'session.json').read_text(), '{}\n')
+
+    def test_a_missing_session_under_sessions_is_created_like_a_new_one(self):
+        settings = {'session_file': 'sessions/mine.json', 'settings_dir': self.root, 'collect': False}
+        session = self.root / 'sessions/mine.json'
+        component = web.create_component(settings)
+        self.assertFalse(session.parent.exists())
+        component.start()
+        component.stop()
+        self.assertEqual(json.loads(session.read_text()),
+                         {'output_root': '../downloads', 'auto_collect': False, 'readers': []})
+        session.write_text('{"auto_collect": false}')
+        component = web.create_component(settings)
+        component.start()
+        component.stop()
+        self.assertEqual(session.read_text(), '{"auto_collect": false}')  # never rewritten
 
     def test_mounted_pages_links_audio_head_and_decisions(self):
         reader = self.root / '1'
@@ -96,6 +111,43 @@ class ComponentTests(unittest.TestCase):
                 self.assertEqual(shell.handle('GET', '/downloads/../state.json')[0], 404)
             finally:
                 component.stop()
+
+    def test_a_host_adds_readers(self):
+        session = self.root / 'session.json'
+        session.write_text(json.dumps({'auto_collect': False, 'readers': [{'reader_id': '1', 'count': 4}]}))
+        component = web.create_component({'session_file': session, 'collect': False})
+        component.add_readers(['2'], 1)  # not started: nothing to add to
+        self.assertEqual(len(json.loads(session.read_text())['readers']), 1)
+        component.start()
+        try:
+            with patch('librivox_download.fetch.get', side_effect=AssertionError('unexpected network')):
+                component.add_readers(['1', '002', '2', '3'], 1)
+                before = session.read_bytes()
+                component.add_readers(['1', '2', '3'], 5)  # listed readers keep their goals
+                self.assertEqual(session.read_bytes(), before)
+                readers = json.loads(component.app.handle('GET', '/api/dashboard')[2])['readers']
+            self.assertEqual(json.loads(before)['readers'], [
+                {'reader_id': '1', 'count': 4},
+                {'reader_id': '2', 'count': 1},
+                {'reader_id': '3', 'count': 1}])
+            self.assertEqual([(r['name'], r['target']) for r in readers],
+                             [('Reader 1', 4), ('Reader 2', 1), ('Reader 3', 1)])
+        finally:
+            component.stop()
+
+    def test_a_host_adds_readers_while_the_session_is_busy(self):
+        session = self.root / 'session.json'
+        session.write_text('{"auto_collect": false}')
+        view = dashboard.Dashboard(manifest=session)
+        view.running = True
+        component = web.dashboard_component(view)
+        component.start()
+        try:
+            component.add_readers(['2'], 1)
+            self.assertEqual(json.loads(session.read_text())['readers'], [{'reader_id': '2', 'count': 1}])
+        finally:
+            view.running = False
+            component.stop()
 
     def test_stop_waits_for_owned_collection(self):
         view = dashboard.Dashboard()

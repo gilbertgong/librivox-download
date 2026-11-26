@@ -240,12 +240,25 @@ class Dashboard:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError("enter a LibriVox reader URL or reader ID")
             value = value.strip()
-            reader = {"reader_id" if value.isdigit() else "url": value, "count": count}
-            data = copy.deepcopy(self.manifest_data)
-            if not self.jobs:
-                data["auto_collect"] = False
-            data.setdefault("readers", []).append(reader)
-            self.save_manifest(data)
+            self._append([{"reader_id" if value.isdigit() else "url": value, "count": count}])
+
+    def add_readers(self, values, count):
+        """For a host: add the reader IDs not listed yet, busy or not (a running operation keeps to the readers it
+        started with)."""
+        from . import launch as batch
+        with self.lock:
+            ids = dict.fromkeys(batch.normalize_reader_id(value, "reader") for value in values)
+            new = [{"reader_id": rid, "count": count} for rid in ids if rid not in self.jobs]
+            if self.manifest and new:
+                self._append(new)
+
+    def _append(self, readers):
+        """Save new session entries; a session's first readers don't start collecting by themselves."""
+        data = copy.deepcopy(self.manifest_data)
+        if not self.jobs:
+            data["auto_collect"] = False
+        data.setdefault("readers", []).extend(readers)
+        self.save_manifest(data)
 
     def set_count(self, rid, count):
         from . import launch as batch

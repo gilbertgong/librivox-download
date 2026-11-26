@@ -1,10 +1,10 @@
 """Collect and review LibriVox samples in a local dashboard, or run a headless JSON batch.
 
-    python console.py
-    python console.py batch.json --dry-run
-    python console.py batch.json
-    python console.py --review downloads
-    python console.py batch.json --headless
+    python librivox_web.py
+    python librivox_web.py batch.json --dry-run
+    python librivox_web.py batch.json
+    python librivox_web.py --review downloads
+    python librivox_web.py batch.json --headless
 
 With --headless, progress goes to stderr and the final JSON summary goes to stdout. Exit 0 means all targets met;
 1 means incomplete/failed readers, 2 means invalid configuration, and 130 means interrupted.
@@ -119,7 +119,7 @@ def load_batch(path, data=None):
 
 def reader_args(job):
     return SimpleNamespace(name=job["name"], url=job["url"], count=job["count"],
-                           projects=max(20, job["count"]), range=job["range_minutes"],
+                           projects=2 * job["count"], range=job["range_minutes"],
                            download_texts=job["download_texts"], text_mirror=job["text_mirror"],
                            min_seconds=job["min_seconds"], language=job["language"], order=job["order"])
 
@@ -307,11 +307,11 @@ def run_batch(jobs, on_state=None, on_result=None, stop=None, state_factory=None
     return {"finished_at": app.now(), "results": results}
 
 
-def main(choose_session=False):
+def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("batch", nargs="?", type=Path,
-                        help=("JSON session file; omit to choose or create one in the console" if choose_session else
-                              f"JSON session file (default: {DEFAULT_SESSION} in the current directory); create if missing"))
+                        help=f"JSON session file, created if missing (dashboard default: {DEFAULT_SESSION} in the "
+                             "current directory)")
     parser.add_argument("--review", type=Path, help="review an output root, reader directory or state.json; no collection")
     parser.add_argument("--port", type=int, default=8765, help="loopback dashboard port (default 8765)")
     parser.add_argument("--headless", action="store_true", help="collect without a dashboard and exit when finished")
@@ -324,7 +324,7 @@ def main(choose_session=False):
         parser.error("--headless, --dry-run and --browse apply only to a batch JSON file")
     if args.headless and args.browse:
         parser.error("--browse requires the dashboard")
-    if choose_session and args.batch is None and (args.headless or args.dry_run):
+    if args.batch is None and (args.headless or args.dry_run):
         parser.error("provide a JSON session file for --headless or --dry-run")
     if args.review:
         from .dashboard import Dashboard, serve_dashboard
@@ -333,10 +333,6 @@ def main(choose_session=False):
         except (OSError, ValueError) as e:
             parser.error(str(e))
         serve_dashboard(dashboard, args.port)
-        return 0
-    if choose_session and args.batch is None and not args.headless and not args.dry_run:
-        from .dashboard import Dashboard, serve_dashboard
-        serve_dashboard(Dashboard(), args.port)
         return 0
     args.batch = args.batch or Path(DEFAULT_SESSION)
     try:

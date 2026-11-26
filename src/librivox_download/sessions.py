@@ -19,6 +19,15 @@ def stop_dashboard(view):
     view.serving = False
 
 
+def create_session_file(path):
+    """Write a new session under a sessions/ folder, creating the folder; an existing file raises FileExistsError."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the established downloads directory when moving new configs into sessions/.
+    data = {"output_root": "../downloads", "auto_collect": False, "readers": []}
+    with path.open("x", encoding="utf-8", newline="\n") as output:
+        output.write(json.dumps(data, indent=2) + "\n")
+
+
 class Sessions:
     def __init__(self, current, directory, enabled=True):
         self.current = current
@@ -77,13 +86,9 @@ class Sessions:
                     raise ValueError("enter a filename, not a path")
                 if not name.lower().endswith(".json"):
                     name += ".json"
-                self.home.mkdir(parents=True, exist_ok=True)
                 path = self.home / name
-                # Keep the established downloads directory when moving new configs into sessions/.
-                data = {"output_root": "../downloads", "auto_collect": False, "readers": []}
                 try:
-                    with path.open("x", encoding="utf-8", newline="\n") as output:
-                        output.write(json.dumps(data, indent=2) + "\n")
+                    create_session_file(path)
                 except FileExistsError:
                     raise ValueError(f"Session {name} already exists; open it or choose another filename") from None
             else:

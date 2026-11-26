@@ -577,3 +577,55 @@ preservation and review writes. 129 offline tests pass on Python 3.12 and Python
 No audio, consumer code or derived inventories changed. Affected live reader state was repaired separately
 with a backup and file-identity checks; derived consumer inventories still require coordinated recovery.
 Running hosts pick up the source fix after restart.
+
+## 2026-11-21 — Installable package
+
+Added Python 3.12+ wheel/sdist metadata, bundled HTML, installed CLI/module entry and namespaced
+vendored runtime, retaining checkout launchers. Hosts can explicitly supply their framework; old
+shared-module hosts remain supported. Legacy single-reader output now defaults to the launch directory,
+not package files. No selection, state, scanning or download behavior changed.
+
+Removed the unnecessary root microweb wrapper; tests import the namespaced runtime and copied-checkout
+checks no longer copy the wrapper. Updater instructions use the installed module or direct vendor path.
+
+Removed THIRD_PARTY.md at the user's request; runtime provenance stays in AI/USAGE.md and
+the upstream license remains embedded in microweb.py. Removed obsolete packaging metadata and links.
+
+Consolidated root launchers into librivox_web.py, retaining existing component exports and discovery
+while delegating standalone startup to the installed CLI. Removed console.py and the legacy root launch/fetch
+wrappers. Added BSD 2-Clause LICENSE matching microweb and distribution license metadata. Shortened the
+README to basic setup/use, preserving the detailed guide in docs/usage.md.
+
+## 2026-11-24 — Readers added by a host
+
+The component gained `add_readers(ids, count)` so a host can add readers it knows of, saved in one write,
+leaving the dashboard as the session file's only writer. It only adds: a first version looked names up and
+added nothing while busy, and a slow site held up the whole list. A goal of 0 was tried and dropped, so that
+added readers bring no new collection behaviour.
+
+A host may now name a session that doesn't exist yet under sessions/: it is created like a new session (folder,
+`output_root: ../downloads`), where `{}` would have failed without the folder and put downloads inside it.
+132 offline tests pass on Python 3.12.
+
+## 2026-11-25 — Scan target is twice the goal
+
+The user had asked for scanning to look for twice the goal; the code used `max(20, goal)`. A configured
+reader's target is now 2 × its goal. Targets already saved in `state.json` still apply when larger.
+
+## 2026-11-25 — Clone, not pip
+
+The installable-package branch was merged for its other changes: one root script, the vendored runtime inside
+the package with `framework=`, the license and the shorter README. Consumers clone the repository instead of
+installing it, so the packaging metadata, installed command and module entry, version number and the
+launch-directory output default were removed.
+
+Updated the vendored microweb from v0.1.2 to v0.2.3 with its updater, at the user's request. Its handler asks
+its server for request tracking, so `fetch.LocalServer`, which serves the `make_handler` adapter, now builds on
+microweb's server.
+
+At the user's request, standalone startup without a filename again opens `session.local.json` in the launch
+directory instead of the picker, as the older launcher did; a host's sessions stay under `sessions/`.
+
+Removed `docs/usage.md`, which repeated much of `AI/USAGE.md`. The README took its batch settings and non-obvious
+behaviour; `AI/USAGE.md` now points there instead of repeating it. The tour of the dashboard's views and buttons
+was dropped.

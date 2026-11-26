@@ -31,6 +31,14 @@ append to the historical log. Don't use an assistant's built-in or per-machine m
 
 *Why:* built-in memory stays on one computer or account, and other assistants can't see it.
 
+## What the README holds
+
+Give the README the batch details and the useful nuances and non-obvious behaviour; leave out what is intuitive
+from the dashboard. `AI/USAGE.md` holds task steps and points to the README for facts; there is no separate usage
+guide.
+
+*Why:* the user wants one place for usage facts, without a tour of obvious things.
+
 ## Keep the shared docs self-contained
 
 The README and shared `AI/` docs describe only the repo: no local paths,
@@ -86,19 +94,22 @@ the existing file aside and restore it in the same step.
 
 ## Console and sessions
 
-Use console.py as the primary entry point; keep implementation in src/librivox_download/ and the vendored
-microweb.py at the root. Keep legacy launchers as thin compatibility adapters. Ordinary console startup
-without a JSON argument opens a picker; it must not silently select or create a session. New session accepts
-a filename and creates exclusively under launch-directory sessions/, which is ignored. Existing JSON files
-in that directory and the launch directory remain selectable. Session switching is inside the downloader
-panel and drains old work before replacing only its controller, preserving files and decisions.
+Use librivox_web.py as the primary entry point; keep implementation in src/librivox_download/, including its
+namespaced vendored microweb.py. Do not add a root framework wrapper. Keep librivox_web.py as the only root
+Python launcher and component adapter. Standalone startup without a JSON argument opens session.local.json
+directly in the launch directory, creating it as {} if missing (unlike a host's sessions, it doesn't go under
+sessions/); a mounted component given no session opens the picker. New session accepts a filename and creates
+exclusively under launch-directory sessions/, which is ignored. Existing JSON files in that directory and the launch directory remain selectable.
+Session switching is inside the downloader panel and drains old work before replacing only its controller,
+preserving files and decisions.
 
-*Why:* the user wants a clean root entry point and seamless standalone/shared hosting, with explicit session
-selection, visible active filenames and no server restart when switching.
+*Why:* the user wants a clean root entry point and seamless standalone/shared hosting, a standalone start that
+is ready to use, visible active filenames and no server restart when switching.
 
 ## Explain reader-entry lockout
 
 Keep adding readers restricted to idle collection for now; show a visible explanation when scanning or
-downloading disables Add reader.
+downloading disables Add reader. This is about the page: a host's `add_readers` only saves entries, with
+nothing to block it (no lookups, no idle requirement).
 
 *Why:* the user prefers the simpler existing behavior while the combined console is being exercised.
