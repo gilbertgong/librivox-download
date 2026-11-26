@@ -7,10 +7,10 @@ import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
-import console  # source-checkout bootstrap
+import librivox_web  # source-checkout bootstrap
 from librivox_download import dashboard as dashboard
 from librivox_download import web as web
-from microweb import Shell
+from librivox_download.microweb import Shell
 from test_librivox_fetch import candidate
 
 
@@ -21,7 +21,7 @@ class ComponentTests(unittest.TestCase):
         self.root = Path(self.temp.name)
 
     def test_shipped_manifest_constructs_the_factory_with_defaults(self):
-        manifest = json.loads(Path(console.__file__).with_name('microweb-component.json').read_text(encoding='utf-8'))
+        manifest = json.loads(Path(librivox_web.__file__).with_name('microweb-component.json').read_text(encoding='utf-8'))
         self.assertEqual(manifest['component_api'], 1)
         manifest = manifest['components'][0]
         self.assertEqual(manifest['factory'], 'librivox_web:create_component')
@@ -42,7 +42,7 @@ class ComponentTests(unittest.TestCase):
         session = self.root / 'session.json'
         component = web.create_component({'session_file': session, 'collect': True})
         self.assertEqual(list(self.root.iterdir()), [])
-        from microweb import _Server
+        from librivox_download.microweb import _Server
         with _Server(('127.0.0.1', 0), component.app._handler_class()) as occupied:
             with self.assertRaises(SystemExit):
                 component.run('127.0.0.1', occupied.server_port)

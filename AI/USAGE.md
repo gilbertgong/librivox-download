@@ -21,20 +21,38 @@ Prerequisite: a local checkout and permission to run a Python interpreter.
 2. Use an existing suitable interpreter. If none exists, explain that Python must be installed and follow the
    user's environment preferences. No third-party Python dependencies, virtual environment, model weights or
    build tools are required.
-3. From the repo root run `python -B console.py --help` with that interpreter.
+3. From the repo root run `python -B librivox_web.py --help` with that interpreter.
 
 Success: help exits successfully. Do not install unrelated audio/AI libraries.
 
+## Installed package setup
+
+With Python 3.12+ and Git, pip install from the Git URL in README (pin a tested full commit for a
+consumer). Check librivox-download --help and python -m librivox_download --help outside the source
+checkout. Source use still has no build dependency; building/installing uses setuptools through pip.
+Runtime dependencies remain empty. Installed state belongs in the launch/settings directory, never
+site-packages. Component consumers import librivox_download.web and pass their framework explicitly.
+
+Packaging checks: build wheel and sdist; install each into an isolated environment and test outside
+the source tree. Verify dashboard.html and vendored runtime are included, no generic microweb module
+is installed, CLI dry-runs and mounted/standalone HTTP work, and user-data paths stay outside the package.
+
 ## Check / update the vendored web runtime
 
-Only on explicit request: `python microweb.py --check-update` reads the upstream release manifest
-without changing files. `python microweb.py --update` installs its release, including over local edits,
+For an installed package, use the module commands below. From an uninstalled source checkout,
+use `python src/librivox_download/microweb.py --check-update` (or `--update`) instead. There is
+no root microweb.py launcher. Both forms target the single package-owned vendored file.
+
+Only on explicit request: `python -m librivox_download.microweb --check-update` reads the upstream release manifest
+without changing files. `python -m librivox_download.microweb --update` installs its release, including over local edits,
 after checking downloaded checksum/version/syntax and preserving current bytes in microweb.py.bak.
 An existing backup must be kept elsewhere or removed deliberately first; it is never overwritten.
-The vendored file currently matches upstream v0.1.2 exactly; this release still refuses local modifications
+The package-owned vendored file currently matches upstream v0.1.2 exactly; this release still refuses local modifications
 when installing updates. Later upstream releases changed that policy. Do not patch or update it silently.
-An authorized upgrade should be followed by the offline downloader tests and provenance refresh in
-THIRD_PARTY.md. Startup/import never performs automatic checks or updates.
+The source is [gilbertgong/microweb v0.1.2](https://github.com/gilbertgong/microweb/tree/v0.1.2),
+SHA-256 `ae72f0eb51cacd5b6a4be2c3f176962be5ba321bf7bcf71537c174c3c4b93b45`;
+its BSD 2-Clause license text remains embedded in file.
+An authorized upgrade should be followed by the offline downloader tests and provenance refresh here. Startup/import never performs automatic checks or updates.
 
 ## Run smoke test / test
 
@@ -53,14 +71,13 @@ Success: every test passes. No existing download directory has been used as a fi
 Prerequisites: setup; a writable session directory and free loopback port. Internet access is needed only
 when the user requests metadata, remote previews or downloads. Use documented selection defaults.
 
-1. Launch `python -B console.py [SESSION.json] [--port PORT]`. Without a filename, use Open session
+1. Launch `python -B librivox_web.py [SESSION.json] [--port PORT]`. Without a filename, use Open session
    or New session. New filenames are created exclusively under launch-directory sessions/ (ignored),
    with .json appended if needed. Existing JSON files in sessions/ and the launch directory are listed
    with validation errors; do not overwrite invalid or existing files. New UI-created sessions default to
    auto_collect=false and output_root=../downloads, retaining the launch-directory downloads location.
    Explicit CLI files retain their own relative output paths and startup auto_collect behavior; --browse
-   suppresses it. Headless/dry-run require an explicit existing file. The legacy librivox_launch.py
-   wrapper retains its older default session.local.json behavior.
+   suppresses it. Headless/dry-run require an explicit existing file.
 2. On Overview, Add a reader accepts a LibriVox URL or ID and target, saves it to the session, and stays idle.
    Follow the reader link to Review. Browse / rescan finds candidates without audio/text downloads.
 3. Review provides per-reader Total, Collect / resume, Scan 10 more and Pause, plus per-card Download and
@@ -123,10 +140,10 @@ browser automation, HTTP API orchestration, additional libraries or new wrapper 
 3. Set `output_root` explicitly if the user chose a destination. Relative paths are relative to the JSON file.
    If operating under a role with read-only repository access, place both JSON and output outside the repo and
    invoke Python with `-B`. Respect that role's authorization boundaries for data collection.
-4. Run `python -B console.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
+4. Run `python -B librivox_web.py PATH_TO_BATCH --dry-run`. Review the resolved settings and output directories.
    This validates the entire configuration without writing output or contacting remote services. Check that no
    other job is using the same output directories before starting actual collection.
-5. If the user wants a browsable dashboard, run `python -B console.py PATH_TO_BATCH [--port PORT]` and open
+5. If the user wants a browsable dashboard, run `python -B librivox_web.py PATH_TO_BATCH [--port PORT]` and open
    the printed loopback URL. Collection starts automatically unless auto_collect is false or --browse is supplied. Overview shows progress and explicit collection/
    pause controls; Review shows all saved candidates and decisions. The server remains available after completion.
    If the request is for unattended command execution, use `--headless` so it exits when collection finishes.
@@ -154,7 +171,7 @@ Prerequisites: setup and the user's existing output root, reader directory or st
 access, migration or new index is needed. This request authorizes opening the dashboard; it doesn't authorize
 making subjective listening decisions or collecting replacements unless the user requests those actions.
 
-1. Run `python -B console.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
+1. Run `python -B librivox_web.py --review OUTPUT_PATH [--port PORT]` and open the printed loopback URL. It reads
    the root state file or immediate reader subdirectories. An empty root is supported; duplicate reader IDs
    require opening the intended reader directory explicitly. Legacy saved state can be reviewed without conversion.
 2. Overview shows saved readers, counts and last status. Review links preserve the reader selection. Review
@@ -265,8 +282,8 @@ For checks use scratch sessions/output; do not switch a live user collection unl
 
 ## Source layout
 
-console.py is the thin primary entry point and exposes create_component. The named application package
+librivox_web.py is the thin primary entry point and exposes create_component. The named application package
 is under src/librivox_download/ (launch, web, dashboard, sessions, fetch, api, projects, text, dashboard.html).
-The root microweb.py stays directly vendored and updatable. Legacy launch/fetch scripts and librivox_web.py
-are small compatibility adapters; keep factory imports quiet and use package-relative imports internally.
-No package installation is needed when running console.py from a source checkout, even from another directory.
+The microweb runtime is vendored inside that package. The single root librivox_web.py
+launches the shared CLI or exposes component factories; keep factory imports quiet and use package-relative imports internally.
+No package installation is needed when running librivox_web.py from a source checkout, even from another directory.

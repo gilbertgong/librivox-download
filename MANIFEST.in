@@ -1,0 +1,4 @@
+include librivox_web.py LICENSE
+include microweb-component.json batch.example.json
+recursive-include docs *.md
+include AI/MEMORY.md AI/PLAN.md AI/PROJECT_LOG.md AI/STRATEGY.md AI/USAGE.md

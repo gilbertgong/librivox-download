@@ -578,6 +578,24 @@ No audio, consumer code or derived inventories changed. Affected live reader sta
 with a backup and file-identity checks; derived consumer inventories still require coordinated recovery.
 Running hosts pick up the source fix after restart.
 
+## 2026-11-21 — Installable package
+
+Added Python 3.12+ wheel/sdist metadata, bundled HTML, installed CLI/module entry and namespaced
+vendored runtime, retaining checkout launchers. Hosts can explicitly supply their framework; old
+shared-module hosts remain supported. Legacy single-reader output now defaults to the launch directory,
+not package files. No selection, state, scanning or download behavior changed.
+
+Removed the unnecessary root microweb wrapper; tests import the namespaced runtime and copied-checkout
+checks no longer copy the wrapper. Updater instructions use the installed module or direct vendor path.
+
+Removed THIRD_PARTY.md at the user's request; runtime provenance stays in AI/USAGE.md and
+the upstream license remains embedded in microweb.py. Removed obsolete packaging metadata and links.
+
+Consolidated root launchers into librivox_web.py, retaining existing component exports and discovery
+while delegating standalone startup to the installed CLI. Removed console.py and the legacy root launch/fetch
+wrappers. Added BSD 2-Clause LICENSE matching microweb and distribution license metadata. Shortened the
+README to basic setup/use, preserving the detailed guide in docs/usage.md.
+
 ## 2026-11-24 — Readers added by a host
 
 The component gained `add_readers(ids, count)` so a host can add readers it knows of, saved in one write,

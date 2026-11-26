@@ -86,8 +86,8 @@ the existing file aside and restore it in the same step.
 
 ## Console and sessions
 
-Use console.py as the primary entry point; keep implementation in src/librivox_download/ and the vendored
-microweb.py at the root. Keep legacy launchers as thin compatibility adapters. Ordinary console startup
+Use librivox_web.py as the primary entry point; keep implementation in src/librivox_download/, including its namespaced vendored
+microweb.py. Do not add a root framework wrapper. Keep librivox_web.py as the only root Python launcher and component adapter. Ordinary console startup
 without a JSON argument opens a picker; it must not silently select or create a session. New session accepts
 a filename and creates exclusively under launch-directory sessions/, which is ignored. Existing JSON files
 in that directory and the launch directory remain selectable. Session switching is inside the downloader

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "librivox-download"
+dynamic = ["version"]
+description = "Collect, browse and review LibriVox recordings and source texts."
+readme = "README.md"
+license = "BSD-2-Clause"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/gilbertgong/librivox-download"
+
+[project.scripts]
+librivox-download = "librivox_download.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "librivox_download.__version__"}
+
+[tool.setuptools.package-data]
+librivox_download = ["dashboard.html"]
