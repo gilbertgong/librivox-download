@@ -86,15 +86,17 @@ the existing file aside and restore it in the same step.
 
 ## Console and sessions
 
-Use librivox_web.py as the primary entry point; keep implementation in src/librivox_download/, including its namespaced vendored
-microweb.py. Do not add a root framework wrapper. Keep librivox_web.py as the only root Python launcher and component adapter. Ordinary console startup
-without a JSON argument opens a picker; it must not silently select or create a session. New session accepts
-a filename and creates exclusively under launch-directory sessions/, which is ignored. Existing JSON files
-in that directory and the launch directory remain selectable. Session switching is inside the downloader
-panel and drains old work before replacing only its controller, preserving files and decisions.
+Use librivox_web.py as the primary entry point; keep implementation in src/librivox_download/, including its
+namespaced vendored microweb.py. Do not add a root framework wrapper. Keep librivox_web.py as the only root
+Python launcher and component adapter. Standalone startup without a JSON argument opens session.local.json
+directly in the launch directory, creating it as {} if missing (unlike a host's sessions, it doesn't go under
+sessions/); a mounted component given no session opens the picker. New session accepts a filename and creates
+exclusively under launch-directory sessions/, which is ignored. Existing JSON files in that directory and the launch directory remain selectable.
+Session switching is inside the downloader panel and drains old work before replacing only its controller,
+preserving files and decisions.
 
-*Why:* the user wants a clean root entry point and seamless standalone/shared hosting, with explicit session
-selection, visible active filenames and no server restart when switching.
+*Why:* the user wants a clean root entry point and seamless standalone/shared hosting, a standalone start that
+is ready to use, visible active filenames and no server restart when switching.
 
 ## Explain reader-entry lockout
 

@@ -44,4 +44,4 @@ class FrameworkTests(unittest.TestCase):
     def test_entry_point_runs_the_console(self):
         with patch('librivox_download.launch.main', return_value=0) as launch:
             self.assertEqual(librivox_web.main(), 0)
-        launch.assert_called_once_with(choose_session=True)
+        launch.assert_called_once_with()

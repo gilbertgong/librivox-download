@@ -56,8 +56,10 @@ Success: every test passes. No existing download directory has been used as a fi
 Prerequisites: setup; a writable session directory and free loopback port. Internet access is needed only
 when the user requests metadata, remote previews or downloads. Use documented selection defaults.
 
-1. Launch `python -B librivox_web.py [SESSION.json] [--port PORT]`. Without a filename, use Open session
-   or New session. New filenames are created exclusively under launch-directory sessions/ (ignored),
+1. Launch `python -B librivox_web.py [SESSION.json] [--port PORT]`. Without a filename it opens
+   session.local.json in the launch directory, creating {} if missing (check whether it is the user's before
+   writing to it); Change session offers Open session and New session. New filenames are created exclusively under
+   launch-directory sessions/ (ignored),
    with .json appended if needed. Existing JSON files in sessions/ and the launch directory are listed
    with validation errors; do not overwrite invalid or existing files. New UI-created sessions default to
    auto_collect=false and output_root=../downloads, retaining the launch-directory downloads location.

@@ -16,9 +16,10 @@ From the repo root, run:
 python -B librivox_web.py
 ```
 
-Without a filename, the console opens a session picker. Choose an existing JSON file or use **New session**
-and enter a filename (default `session.local.json`). New files live under `sessions/` in the directory you
-launched from; that directory is ignored by Git. The picker also lists JSON files directly in the launch
+Without a filename, the dashboard opens `session.local.json` in the directory you launched from, creating it as
+`{}` the first time; recordings then go to `downloads/` beside it. **Change session** shows the session picker:
+choose an existing JSON file or use **New session** and enter a filename. New files live under `sessions/` in the
+launch directory; that folder is ignored by Git. The picker also lists JSON files directly in the launch
 directory, including existing batch files, and reports invalid configurations. Existing files are never replaced.
 A `.json` extension is added to new names if omitted.
 

@@ -14,8 +14,9 @@ Clone the repository, then from its folder:
 python librivox_web.py
 ```
 
-Open the printed local URL, create a session, and add readers by URL or ID. Browse recordings,
-listen, download, and mark recordings to keep or avoid. Sessions and review decisions are saved locally.
+Open the printed local URL and add readers by URL or ID. Browse recordings, listen, download, and mark
+recordings to keep or avoid. The dashboard opens `session.local.json` in the current folder, creating it the first
+time, and can switch to other sessions. Sessions and review decisions are saved locally.
 
 ## Batch collection
 

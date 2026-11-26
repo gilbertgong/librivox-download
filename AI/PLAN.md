@@ -19,8 +19,8 @@ package-relative imports. The vendored microweb runtime lives there too and matc
 may pass their own as framework=. There is no root framework wrapper. See USAGE.md for provenance and updater
 commands.
 
-With no filename, librivox_web.py opens a session picker. It lists JSON files in the launch directory and
-sessions/ with validation status. New session creates a named file exclusively under sessions/; that
+With no filename, librivox_web.py opens session.local.json in the launch directory, creating {} if missing. The
+session picker lists JSON files in the launch directory and sessions/ with validation status. New session creates a named file exclusively under sessions/; that
 folder and microweb.py.bak are ignored. UI-created configs explicitly retain ../downloads and disable
 auto collection. Existing explicit JSON paths retain their own config-relative output roots. The header
 names the active session with its full path on hover. Change session validates before pausing/draining
@@ -34,15 +34,15 @@ A host can add readers through the component's `add_readers(ids, count)`: no loo
 page's Add reader), in one save, so the dashboard stays the only writer of its session file. A host's missing
 session_file directly under settings_dir/sessions/ is created as New session creates one; the standalone CLI
 and other paths still create {}.
-All 136 tests pass on Python 3.12; an earlier 133 also passed on MSYS2/UCRT64 Python 3.14, including package
-portability and session creation/validation/draining/mounted tests.
+All 134 tests pass on Python 3.12, including checkout portability and session creation/validation/draining/mounted
+tests.
 Browser checks use generated data and scratch sessions; no production collection or research work is used.
 
 Keep the Python 3.12 standard-library tool and its solo-reader/length selection rules. Source books download
 by default; missing text joins 64 kbps and out-of-range length as a degraded fallback. The interactive script also
 provides shared state, scanning and transfer functions. JSON batch collection is the primary workflow;
 manual entry and automatic batches use one JSON session and three-view dashboard. Empty JSON objects open
-reader entry; manual controls live with recordings on Review. librivox_web.py starts the picker or an explicit
+reader entry; manual controls live with recordings on Review. librivox_web.py starts the default or an explicit
 JSON session. Older root launch/fetch wrappers have been removed.
 Explicit missing dashboard session paths create {}; headless/dry-run require existing valid files.
 The older single-reader CLI is a compatibility

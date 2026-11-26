@@ -11,7 +11,7 @@ from librivox_download.web import create_app, create_component, dashboard_compon
 
 def main():
     from librivox_download.launch import main as launch
-    return launch(choose_session=True)
+    return launch()
 
 
 if __name__ == "__main__":

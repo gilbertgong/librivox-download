@@ -49,13 +49,6 @@ class SessionTests(unittest.TestCase):
     def post(self, component, action, **body):
         return component.app.handle("POST", "/api/" + action, json.dumps(body).encode())
 
-    def test_new_console_without_arguments_opens_picker_without_writing(self):
-        with contextlib.chdir(self.root), patch("sys.argv", ["librivox_web.py"]), \
-                patch.object(dashboard, "serve_dashboard") as serve:
-            self.assertEqual(librivox_web.main(), 0)
-        self.assertIsNone(serve.call_args.args[0].manifest)
-        self.assertEqual(list(self.root.iterdir()), [])
-
     def test_new_console_requires_file_for_noninteractive_commands(self):
         for option in ("--headless", "--dry-run"):
             with patch("sys.argv", ["librivox_web.py", option]), contextlib.redirect_stderr(io.StringIO()), \

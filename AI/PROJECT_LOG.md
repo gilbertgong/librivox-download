@@ -622,3 +622,6 @@ launch-directory output default were removed.
 Updated the vendored microweb from v0.1.2 to v0.2.3 with its updater, at the user's request. Its handler asks
 its server for request tracking, so `fetch.LocalServer`, which serves the `make_handler` adapter, now builds on
 microweb's server.
+
+At the user's request, standalone startup without a filename again opens `session.local.json` in the launch
+directory instead of the picker, as the older launcher did; a host's sessions stay under `sessions/`.
